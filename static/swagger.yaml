@@ -1,0 +1,23 @@
+openapi: 3.0.3
+info:
+  title: Demo API Docs
+  version: 1.0.0
+  description: Documentación mínima de ejemplo en Swagger UI
+servers:
+  - url: http://localhost:8000
+paths:
+  /hello:
+    get:
+      summary: Endpoint de prueba (no implementado)
+      responses:
+        '200':
+          description: Respuesta exitosa
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+              example:
+                message: "Hola desde Swagger UI"
