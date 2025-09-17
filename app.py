@@ -51,7 +51,7 @@ class Usuario:
 
 @app.route("/")
 def home():
-    return '<h2>Bienvenido Seas</h2><p>Visita la <a href="/docs">documentación</a> o la <a href="/usuarios">lista de usuarios</a>.</p>'
+    return '<h2>Bienvenido Sea</h2><p>Visita la <a href="/docs"> documentación </a> o la <a href="/usuarios">lista de usuarios</a>.</p>'
 
 @app.route("/usuarios")
 def listar_usuarios():
