@@ -1,6 +1,7 @@
 from flask import Flask, render_template, request, redirect, url_for
 from flask_swagger_ui import get_swaggerui_blueprint
 import psycopg2
+from models.usuario import Usuario
 
 app = Flask(__name__, static_folder="static")
 
@@ -56,9 +57,8 @@ def home():
 @app.route("/usuarios")
 def listar_usuarios():
     usuarios = Usuario.get_all()
-    # Renderiza un HTML básico (crearemos templates después)
-    lista = "".join([f"<li>{u.id} - {u.nombre} ({u.email}) → Rol: {u.rol}</li>" for u in usuarios])
-    return f"<h1>Usuarios</h1><ul>{lista}</ul><a href='/usuarios/nuevo'>➕ Nuevo Usuario</a>"
+    return render_template("usuarios.html", usuarios=usuarios)
+
 
 @app.route("/usuarios/nuevo", methods=["GET", "POST"])
 def nuevo_usuario():
@@ -72,21 +72,7 @@ def nuevo_usuario():
         user.save()
         return redirect(url_for("listar_usuarios"))
 
-    # Formulario básico sin templates
-    return """
-    <h1>Registrar Usuario</h1>
-    <form method="POST">
-      Nombre: <input type="text" name="nombre"><br><br>
-      Email: <input type="email" name="email"><br><br>
-      Password: <input type="password" name="password"><br><br>
-      Rol: <select name="rol">
-        <option value="admin">Admin</option>
-        <option value="editor">Editor</option>
-        <option value="lector">Lector</option>
-      </select><br><br>
-      <button type="submit">Guardar</button>
-    </form>
-    """
+    return render_template("nuevo_usuario.html")
 
 if __name__ == "__main__":
     app.run(port=8000, debug=True)
