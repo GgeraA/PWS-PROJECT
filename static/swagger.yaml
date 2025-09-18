@@ -21,3 +21,53 @@ paths:
                     type: string
               example:
                 message: "Hola desde Swagger UI"
+          
+  /auth/recover:
+    post:
+      summary: Recuperación de cuenta por correo
+      description: Envía un enlace de recuperación a la dirección de correo asociada al usuario.
+      tags:
+        - Autenticación
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                  example: respaldogg20@mail.com
+      responses:
+        "200":
+          description: Enlace de recuperación enviado
+        "400":
+          description: Correo no válido
+        "404":
+          description: Usuario no encontrado
+
+
+  /auth/verify-otp:
+    post:
+      summary: Verificación de código OTP
+      description: Valida el código OTP enviado por correo o SMS.
+      tags:
+        - Autenticación
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                  example: respaldogg20@mail.com
+                otp:
+                  type: string
+                  example: "123456"
+      responses:
+        "200":
+          description: OTP válido, autenticación exitosa
+        "400":
+          description: OTP inválido o expirado
