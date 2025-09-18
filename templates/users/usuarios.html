@@ -2,7 +2,7 @@
 {% block title %}Usuarios{% endblock %}
 {% block content %}
 <h1>Usuarios Registrados</h1>
-<a class="btn btn-primary mb-3" href="{{ url_for('nuevo_usuario') }}">+ Nuevo Usuario</a>
+<a class="btn btn-primary mb-3" href="{{ url_for('users.nuevo_usuario') }}">+ Nuevo Usuario</a>
 <ul class="list-group">
   {% for u in usuarios %}
   <li class="list-group-item">{{ u.id }} - {{ u.nombre }} ({{ u.email }}) → Rol: {{ u.rol }}</li>
