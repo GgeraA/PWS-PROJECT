@@ -45,3 +45,18 @@ def verificar_otp():
             flash("Código inválido o expirado", "error")
 
     return render_template("auth/verificar_otp.html")
+
+# HU1.2 - Recuperar usuario
+@auth_bp.route("/auth/recover-user", methods=["POST"])
+def recover_user():
+    data = request.get_json()
+    contact = data.get("contact")
+    return AuthService.recover_user(contact)
+
+
+# HU1.2 - Recuperar contraseña
+@auth_bp.route("/auth/recover-password", methods=["POST"])
+def recover_password():
+    data = request.get_json()
+    contact = data.get("contact")
+    return AuthService.recover_password(contact)
