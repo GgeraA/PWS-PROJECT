@@ -3,7 +3,7 @@ import ssl
 import time
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from config import EMAIL_CONFIG
+from config import Config
 
 def send_email(to_email, subject, body):
     """
@@ -14,17 +14,17 @@ def send_email(to_email, subject, body):
     try:
         # Construcción del mensaje
         message = MIMEMultipart()
-        message["From"] = EMAIL_CONFIG["USER"]
+        message["From"] = Config.MAIL_USERNAME
         message["To"] = to_email
         message["Subject"] = subject
         message.attach(MIMEText(body, "plain"))
 
         # Conexión segura con SMTP
         context = ssl.create_default_context()
-        with smtplib.SMTP(EMAIL_CONFIG["HOST"], EMAIL_CONFIG["PORT"]) as server:
+        with smtplib.SMTP(Config.MAIL_SERVER, Config.MAIL_PORT) as server:
             server.starttls(context=context)
-            server.login(EMAIL_CONFIG["USER"], EMAIL_CONFIG["PASSWORD"])
-            server.sendmail(EMAIL_CONFIG["USER"], to_email, message.as_string())
+            server.login(Config.MAIL_USERNAME, Config.MAIL_PASSWORD)
+            server.sendmail(Config.MAIL_USERNAME, to_email, message.as_string())
 
         latency = round(time.time() - start, 3)
         return {"status": "success", "latency": latency}

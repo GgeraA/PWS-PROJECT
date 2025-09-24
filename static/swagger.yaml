@@ -38,7 +38,7 @@ paths:
               properties:
                 email:
                   type: string
-                  example: respaldogg20@mail.com
+                  example: respaldogg20@gmail.com
       responses:
         "200":
           description: Enlace de recuperación enviado
@@ -63,7 +63,7 @@ paths:
               properties:
                 email:
                   type: string
-                  example: respaldogg20@mail.com
+                  example: respaldogg20@gmail.com
                 otp:
                   type: string
                   example: "123456"
