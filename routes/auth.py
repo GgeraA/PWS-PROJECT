@@ -1,4 +1,6 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash
+from flask import Blueprint, jsonify, render_template, request, redirect, url_for, flash
+
+from services.auth_service import AuthService
 
 auth_bp = Blueprint("auth", __name__)
 
@@ -45,3 +47,21 @@ def verificar_otp():
             flash("Código inválido o expirado", "error")
 
     return render_template("auth/verificar_otp.html")
+
+# ----------------- API JSON -----------------
+# HU1.2 - Recuperar usuario
+@auth_bp.route("/api/auth/recover-user", methods=["POST"])
+def api_recover_user():
+    data = request.get_json()
+    contact = data.get("contact")
+    result, status = AuthService.recover_user(contact)
+    return jsonify(result), status
+
+
+# HU1.2 - Recuperar contraseña
+@auth_bp.route("/api/auth/recover-password", methods=["POST"])
+def api_recover_password():
+    data = request.get_json()
+    contact = data.get("contact")
+    result, status = AuthService.recover_password(contact)
+    return jsonify(result), status
