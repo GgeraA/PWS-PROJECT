@@ -17,10 +17,3 @@ class Config:
     MAIL_USERNAME = os.getenv("MAIL_USERNAME")
     MAIL_PASSWORD = os.getenv("MAIL_PASSWORD")
     MAIL_DEFAULT_SENDER = os.getenv("MAIL_DEFAULT_SENDER")
-
-EMAIL_CONFIG = {
-    "HOST": "smtp.gmail.com",
-    "PORT": 587,
-    "USER": "easypc.companymx@gmail.com",
-    "PASSWORD": "tu_password_o_token_app"
-}
