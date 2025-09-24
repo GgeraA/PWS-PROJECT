@@ -1,7 +1,7 @@
 import os
 from dotenv import load_dotenv
 
-DATABASE = { "dbname": "seguridad", "user": "postgres", "password": "ggerahl08ROM#", "host": "localhost", "port": 5432 }
+DATABASE = { "dbname": "seguridad", "user": "postgres", "password": "1234", "host": "localhost", "port": 5432 }
 
 load_dotenv()
 

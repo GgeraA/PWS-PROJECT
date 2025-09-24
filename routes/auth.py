@@ -1,7 +1,6 @@
 from flask import Blueprint, jsonify, render_template, request, redirect, url_for, flash
 
 from services.auth_service import AuthService
-
 auth_bp = Blueprint("auth", __name__)
 
 # Login
@@ -52,16 +51,30 @@ def verificar_otp():
 # HU1.2 - Recuperar usuario
 @auth_bp.route("/api/auth/recover-user", methods=["POST"])
 def api_recover_user():
-    data = request.get_json()
-    contact = data.get("contact")
-    result, status = AuthService.recover_user(contact)
-    return jsonify(result), status
+    try:
+        data = request.get_json()
+        if not data or "contact" not in data:
+            return jsonify({"error": "Falta el campo 'contact'"}), 400
+
+        contact = data.get("contact")
+        result, status = AuthService.recover_user(contact)
+        return jsonify(result), status
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 # HU1.2 - Recuperar contraseña
 @auth_bp.route("/api/auth/recover-password", methods=["POST"])
 def api_recover_password():
-    data = request.get_json()
-    contact = data.get("contact")
-    result, status = AuthService.recover_password(contact)
-    return jsonify(result), status
+    try:
+        data = request.get_json()
+        if not data or "contact" not in data:
+            return jsonify({"error": "Falta el campo 'contact'"}), 400
+
+        contact = data.get("contact")
+        result, status = AuthService.recover_password(contact)
+        return jsonify(result), status
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500

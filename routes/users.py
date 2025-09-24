@@ -1,23 +1,17 @@
-from flask import Blueprint, render_template, request, redirect, url_for
-from models.usuario import Usuario
+from flask import Blueprint, request, jsonify
+from services.user_service import get_all_users, create_user
 
 users_bp = Blueprint("users", __name__)
 
-@users_bp.route("/")
-def listar_usuarios():
-    usuarios = Usuario.get_all()
-    return render_template("users/usuarios.html", usuarios=usuarios)
+@users_bp.route("/", methods=["GET"])
+def list_users():
+    users = get_all_users()
+    return jsonify(users), 200
 
-@users_bp.route("/nuevo", methods=["GET", "POST"])
-def nuevo_usuario():
-    if request.method == "POST":
-        nombre = request.form["nombre"]
-        email = request.form["email"]
-        password = request.form["password"]
-        rol = request.form["rol"]
-
-        user = Usuario(nombre=nombre, email=email, password=password, rol=rol)
-        user.save()
-        return redirect(url_for("users.listar_usuarios"))
-
-    return render_template("users/nuevo_usuario.html")
+@users_bp.route("/", methods=["POST"])
+def add_user():
+    data = request.json
+    user = create_user(data)
+    if user:
+        return jsonify(user), 201
+    return jsonify({"error": "No se pudo crear el usuario"}), 400
