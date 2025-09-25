@@ -65,7 +65,7 @@ def verificar_otp():
 
 # ----------------- API JSON -----------------
 # HU1.2 - Recuperar usuario
-@auth_bp.route("/api/auth/recover-user", methods=["POST"])
+@auth_bp.route("/recover-user", methods=["POST"])
 def api_recover_user():
     data = request.get_json()
     contact = data.get("contact")
@@ -73,10 +73,16 @@ def api_recover_user():
     return jsonify(result), status
 
 
-# HU1.2 - Recuperar contraseña
-@auth_bp.route("/api/auth/recover-password", methods=["POST"])
+@auth_bp.route("/recover-password", methods=["POST"])
 def api_recover_password():
-    data = request.get_json()
-    contact = data.get("contact")
-    result, status = AuthService.recover_password(contact)
-    return jsonify(result), status
+    try:
+        data = request.get_json()
+        if not data or "contact" not in data:
+            return jsonify({"error": "Falta el campo 'contact'"}), 400
+
+        contact = data.get("contact")
+        result, status = AuthService.recover_password(contact)
+        return jsonify(result), status
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500

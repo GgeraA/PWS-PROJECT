@@ -33,7 +33,7 @@ class AuthService:
             log_event("RECOVER_USER", email, "ERROR", str(e))
             return {"error": str(e)}, 500
         finally:
-            print(f"[PERF] Tiempo de respuesta recover_user={round(time.time()-start,3)}s")
+            print(f"[PERF] Tiempo recover_user={round(time.time()-start,3)}s")
 
     # ---------------- Recuperar contraseña ----------------
     @staticmethod
