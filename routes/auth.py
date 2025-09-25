@@ -49,7 +49,7 @@ def verificar_otp():
 
 # ----------------- API JSON -----------------
 # HU1.2 - Recuperar usuario
-@auth_bp.route("/api/auth/recover-user", methods=["POST"])
+@auth_bp.route("/recover-user", methods=["POST"])
 def api_recover_user():
     try:
         data = request.get_json()
@@ -64,8 +64,7 @@ def api_recover_user():
         return jsonify({"error": str(e)}), 500
 
 
-# HU1.2 - Recuperar contraseña
-@auth_bp.route("/api/auth/recover-password", methods=["POST"])
+@auth_bp.route("/recover-password", methods=["POST"])
 def api_recover_password():
     try:
         data = request.get_json()
@@ -78,3 +77,5 @@ def api_recover_password():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+

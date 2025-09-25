@@ -72,3 +72,39 @@ paths:
           description: OTP válido, autenticación exitosa
         "400":
           description: OTP inválido o expirado
+
+  /auth/recover-user:
+    post:
+      summary: Recuperar nombre de usuario
+      description: Envía el nombre de usuario al correo del usuario
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                contact:
+                  type: string
+                  example: "brayangonzalez030405@gmail.com"
+      responses:
+        "200":
+          description: Nombre de usuario enviado correctamente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Nombre de usuario enviado correctamente."
+        "404":
+          description: Usuario no encontrado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Usuario no encontrado"
