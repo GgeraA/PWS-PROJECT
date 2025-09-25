@@ -23,10 +23,10 @@ paths:
                 message: "Hola desde Swagger UI"
                 
           
-  /auth/recover:
+  /auth/register:
     post:
-      summary: Recuperación de cuenta por correo
-      description: Envía un enlace de recuperación a la dirección de correo asociada al usuario.
+      summary: Registro de usuario
+      description: Permite registrar un usuario nuevo con nombre, email y contraseña segura.
       tags:
         - Autenticación
       requestBody:
@@ -35,23 +35,31 @@ paths:
           application/json:
             schema:
               type: object
+              required:
+                - nombre
+                - email
+                - password
               properties:
+                nombre:
+                  type: string
+                  example: "Gerardo"
                 email:
                   type: string
-                  example: respaldogg20@gmail.com
+                  example: "gerardo@gmail.com"
+                password:
+                  type: string
+                  example: "Passw0rd!"
       responses:
         "200":
-          description: Enlace de recuperación enviado
+          description: Usuario registrado correctamente
         "400":
-          description: Correo no válido
-        "404":
-          description: Usuario no encontrado
+          description: Error de validación (correo o contraseña inválidos)
 
 
-  /auth/verify-otp:
+  /auth/login:
     post:
-      summary: Verificación de código OTP
-      description: Valida el código OTP enviado por correo o SMS.
+      summary: Inicio de sesión
+      description: Permite iniciar sesión y recibir un token JWT.
       tags:
         - Autenticación
       requestBody:
@@ -60,15 +68,56 @@ paths:
           application/json:
             schema:
               type: object
+              required:
+                - email
+                - password
               properties:
                 email:
                   type: string
-                  example: respaldogg20@gmail.com
-                otp:
+                  example: "gerardo@gmail.com"
+                password:
                   type: string
-                  example: "123456"
+                  example: "Passw0rd!"
       responses:
         "200":
-          description: OTP válido, autenticación exitosa
+          description: Inicio de sesión exitoso
         "400":
-          description: OTP inválido o expirado
+          description: Campos obligatorios faltantes
+        "401":
+          description: Credenciales inválidas
+
+  /roles/assign:
+    put:
+      summary: Asignar rol a usuario (solo admin)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: ["user_id", "role"]
+              properties:
+                user_id:
+                  type: integer
+                role:
+                  type: string
+                  enum: ["admin","usuario","visitante"]
+      responses:
+        "200":
+          description: Role actualizado
+        "400":
+          description: Request inválido
+        "401":
+          description: Token inválido/ausente
+        "403":
+          description: Permisos insuficientes
+  /roles/users:
+    get:
+      summary: Listar usuarios con roles (solo admin)
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Lista de usuarios

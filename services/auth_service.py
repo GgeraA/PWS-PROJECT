@@ -1,77 +1,98 @@
 import psycopg2
 import secrets
 import time
-from config import DATABASE
+import jwt
+import datetime
+from config import Config
 from utils.email_helper import send_email
 from utils.sms_helper import send_sms
 from utils.audit_helper import log_event
+from models.user import User
+from passlib.hash import bcrypt
+
 
 class AuthService:
 
+    # ---------------- Recuperar usuario ----------------
     @staticmethod
-    def recover_user(email_or_phone):
+    def recover_user(email):
         start = time.time()
         try:
-            conn = psycopg2.connect(**DATABASE)
-            cur = conn.cursor()
-            cur.execute("SELECT username, email, telefono FROM usuarios WHERE email = %s OR telefono = %s",
-                        (email_or_phone, email_or_phone))
-            user = cur.fetchone()
-            conn.close()
-
+            user = User.find_by_email(email)
             if not user:
-                log_event("RECOVER_USER", email_or_phone, "FAILED", "Usuario no encontrado")
+                log_event("RECOVER_USER", email, "FAILED", "Usuario no encontrado")
                 return {"error": "Usuario no encontrado"}, 404
 
-            nombre_usuario, correo, telefono = user
+            # Simulación envío de correo
+            result = send_email(user.email, "Recuperación de usuario", f"Tu nombre de usuario es: {user.nombre}")
 
-            # Notificación por correo o SMS
-            if "@" in email_or_phone:
-                result = send_email(correo, "Recuperación de usuario", f"Tu nombre de usuario es: {nombre_usuario}")
-            else:
-                result = send_sms(telefono, f"Tu nombre de usuario es: {nombre_usuario}")
-
-            log_event("RECOVER_USER", email_or_phone, "SUCCESS", f"Latencia={result['latency']}s")
+            log_event("RECOVER_USER", email, "SUCCESS", f"Latencia={result['latency']}s")
             return {"message": "Nombre de usuario enviado correctamente."}, 200
 
         except Exception as e:
-            log_event("RECOVER_USER", email_or_phone, "ERROR", str(e))
+            log_event("RECOVER_USER", email, "ERROR", str(e))
             return {"error": str(e)}, 500
         finally:
             print(f"[PERF] Tiempo de respuesta recover_user={round(time.time()-start,3)}s")
 
+    # ---------------- Recuperar contraseña ----------------
     @staticmethod
-    def recover_password(email_or_phone):
+    def recover_password(email):
         start = time.time()
         try:
-            conn = psycopg2.connect(**DATABASE)
-            cur = conn.cursor()
-            cur.execute("SELECT email, telefono FROM usuarios WHERE email = %s OR telefono = %s",
-                        (email_or_phone, email_or_phone))
-            user = cur.fetchone()
-            conn.close()
-
+            user = User.find_by_email(email)
             if not user:
-                log_event("RECOVER_PASS", email_or_phone, "FAILED", "Usuario no encontrado")
+                log_event("RECOVER_PASS", email, "FAILED", "Usuario no encontrado")
                 return {"error": "Usuario no encontrado"}, 404
-
-            correo, telefono = user
 
             # Generar token temporal
             token = secrets.token_urlsafe(16)
             reset_link = f"https://tuapp.com/reset-password/{token}"
 
-            # Notificación
-            if "@" in email_or_phone:
-                result = send_email(correo, "Recuperación de contraseña", f"Usa este enlace temporal: {reset_link}")
-            else:
-                result = send_sms(telefono, f"Usa este código temporal: {token}")
+            # Simulación envío de correo
+            result = send_email(user.email, "Recuperación de contraseña", f"Usa este enlace temporal: {reset_link}")
 
-            log_event("RECOVER_PASS", email_or_phone, "SUCCESS", f"Latencia={result['latency']}s")
+            log_event("RECOVER_PASS", email, "SUCCESS", f"Latencia={result['latency']}s")
             return {"message": "Enlace de recuperación enviado."}, 200
 
         except Exception as e:
-            log_event("RECOVER_PASS", email_or_phone, "ERROR", str(e))
+            log_event("RECOVER_PASS", email, "ERROR", str(e))
             return {"error": str(e)}, 500
         finally:
             print(f"[PERF] Tiempo de respuesta recover_password={round(time.time()-start,3)}s")
+
+    # ---------------- Registro ----------------
+    @staticmethod
+    def register(nombre, email, password, rol="usuario"):
+        try:
+            user_id = User.create_user(nombre, email, password, rol)
+        except Exception as e:
+            return {"error": str(e)}, 500
+
+        payload = {
+            "user_id": user_id,
+            "email": email,
+            "role": rol,
+            "exp": datetime.datetime.utcnow() + datetime.timedelta(seconds=Config.JWT_EXP_DELTA_SECONDS)
+        }
+        token = jwt.encode(payload, Config.SECRET_KEY, algorithm="HS256")
+        return {"message": "Usuario registrado", "token": token}, 201
+
+    # ---------------- Login ----------------
+    @staticmethod
+    def login(email, password):
+        user = User.find_by_email(email)
+        if not user:
+            return {"error": "Usuario no encontrado"}, 404
+
+        if not bcrypt.verify(password, user.password):
+            return {"error": "Contraseña incorrecta"}, 401
+
+        payload = {
+            "user_id": user.id,
+            "email": user.email,
+            "role": user.rol,
+            "exp": datetime.datetime.utcnow() + datetime.timedelta(seconds=Config.JWT_EXP_DELTA_SECONDS)
+        }
+        token = jwt.encode(payload, Config.SECRET_KEY, algorithm="HS256")
+        return {"message": "Inicio de sesión exitoso", "token": token}, 200

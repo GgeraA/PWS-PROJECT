@@ -1,7 +1,9 @@
 {% extends "base.html" %}
 {% block title %}Registrar Usuario{% endblock %}
+
 {% block content %}
 <h1>Registrar Usuario</h1>
+
 <form method="POST" class="mt-3">
     <div class="mb-3">
         <label class="form-label">Nombre:</label>
@@ -14,17 +16,22 @@
     </div>
 
     <div class="mb-3">
-        <label class="form-label">Password:</label>
+        <label class="form-label">Contraseña:</label>
         <input type="password" name="password" class="form-control" required>
     </div>
 
     <div class="mb-3">
         <label class="form-label">Rol:</label>
         <select name="rol" class="form-select" required>
-            <option value="admin">Admin</option>
-            <option value="editor">Editor</option>
-            <option value="lector">Lector</option>
+            <option value="admin">Administrador</option>
+            <option value="usuario">Usuario</option>
+            <option value="visitante">Visitante</option>
         </select>
+    </div>
+
+    <div class="form-check mb-3">
+        <input type="checkbox" name="two_factor_enabled" class="form-check-input" id="2faCheck">
+        <label class="form-check-label" for="2faCheck">Habilitar autenticación de dos factores</label>
     </div>
 
     <button type="submit" class="btn btn-success">Guardar</button>
