@@ -2,6 +2,8 @@ import datetime
 from flask import Blueprint, flash, jsonify, redirect, render_template, request, url_for
 import jwt
 from config import Config
+from werkzeug.security import check_password_hash
+from models.user import User
 from services.auth_service import AuthService
 auth_bp = Blueprint("auth", __name__)
 
@@ -27,7 +29,9 @@ def login():
         email = request.form["email"]
         password = request.form["password"]
 
-        if email == "admin@test.com" and password == "1234":
+        user = User.get_by_email(email)  # necesitas este método en tu modelo
+        if user and check_password_hash(user.password, password):
+            # login correcto: redirige o crea session/jwt, etc.
             return redirect(url_for("users.listar_usuarios"))
         else:
             flash("Credenciales inválidas", "error")
