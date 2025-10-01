@@ -9,7 +9,7 @@ from utils.sms_helper import send_sms
 from utils.audit_helper import log_event
 from models.user import User
 from passlib.hash import bcrypt
-
+from datetime import datetime, timedelta
 
 class AuthService:
 
@@ -45,8 +45,22 @@ class AuthService:
                 log_event("RECOVER_PASS", email, "FAILED", "Usuario no encontrado")
                 return {"error": "Usuario no encontrado"}, 404
 
-            # Generar token temporal
+            # Generar token temporal y caducidad (30 min)
             token = secrets.token_urlsafe(16)
+            expira_en = datetime.utcnow() + timedelta(minutes=30)
+
+            # Guardar token en la BD
+            conn = psycopg2.connect(**Config.DATABASE)
+
+            cur = conn.cursor()
+            cur.execute(
+                "INSERT INTO password_resets (email, token, expira_en) VALUES (%s, %s, %s)",
+                (email, token, expira_en)
+            )
+            conn.commit()
+            cur.close()
+            conn.close()
+
             reset_link = f"https://tuapp.com/reset-password/{token}"
 
             # Simulación envío de correo
@@ -60,6 +74,52 @@ class AuthService:
             return {"error": str(e)}, 500
         finally:
             print(f"[PERF] Tiempo de respuesta recover_password={round(time.time()-start,3)}s")
+    
+
+    @staticmethod
+    def reset_password(token, new_password):
+        try:
+            # Conexión segura con 'with', se cierra sola al salir del bloque
+            with psycopg2.connect(**Config.DATABASE) as conn:
+                with conn.cursor() as cur:
+
+                    # Buscar token válido
+                    cur.execute(
+                        "SELECT email, expira_en FROM password_resets WHERE token=%s",
+                        (token,)
+                    )
+                    row = cur.fetchone()
+
+                    if not row:
+                        return {"error": "Token inválido"}, 400
+
+                    email, expira_en = row
+                    if datetime.utcnow() > expira_en:
+                        return {"error": "Token expirado"}, 400
+
+                    # Hashear nueva contraseña (max 72 caracteres)
+                    hashed = bcrypt.hash(new_password[:72])
+
+                    # Actualizar contraseña en users
+                    cur.execute(
+                        "UPDATE users SET password=%s WHERE email=%s",
+                        (hashed, email)
+                    )
+
+                    # Eliminar token para que no se reuse
+                    cur.execute(
+                        "DELETE FROM password_resets WHERE token=%s",
+                        (token,)
+                    )
+
+                    conn.commit()
+
+                    log_event("RESET_PASS", email, "SUCCESS", "Contraseña cambiada")
+                    return {"message": "Contraseña actualizada exitosamente"}, 200
+
+        except Exception as e:
+            log_event("RESET_PASS", None, "ERROR", str(e))
+            return {"error": str(e)}, 500
 
     # ---------------- Registro ----------------
     @staticmethod

@@ -73,16 +73,28 @@ def api_recover_user():
     return jsonify(result), status
 
 
+# ---------------- Recuperar contraseña ----------------
 @auth_bp.route("/recover-password", methods=["POST"])
-def api_recover_password():
-    try:
-        data = request.get_json()
-        if not data or "contact" not in data:
-            return jsonify({"error": "Falta el campo 'contact'"}), 400
+def recover_password():
+    data = request.get_json()
+    email = data.get("email")
 
-        contact = data.get("contact")
-        result, status = AuthService.recover_password(contact)
-        return jsonify(result), status
+    if not email:
+        return jsonify({"error": "Email requerido"}), 400
 
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    response, status = AuthService.recover_password(email)
+    return jsonify(response), status
+
+
+# ---------------- Resetear contraseña ----------------
+@auth_bp.route("/reset-password", methods=["POST"])
+def reset_password():
+    data = request.get_json()
+    token = data.get("token")
+    new_password = data.get("new_password")
+
+    if not token or not new_password:
+        return jsonify({"error": "Token y nueva contraseña requeridos"}), 400
+
+    response, status = AuthService.reset_password(token, new_password)
+    return jsonify(response), status
