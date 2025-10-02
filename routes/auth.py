@@ -1,7 +1,5 @@
 import datetime
 from flask import Blueprint, flash, jsonify, redirect, render_template, request, url_for
-import jwt
-from config import Config
 from werkzeug.security import check_password_hash
 from models.user import User
 from services.auth_service import AuthService
@@ -23,20 +21,28 @@ def api_register():
     result, status = AuthService.register(nombre, email, password, rol)
     return jsonify(result), status
 
-@auth_bp.route("/login", methods=["GET", "POST"])
+
+# -----------------Login ----------------------------
+@auth_bp.route("/login", methods=["POST"])
 def login():
-    if request.method == "POST":
-        email = request.form["email"]
-        password = request.form["password"]
+    data = request.get_json()
 
-        user = User.get_by_email(email)  # necesitas este método en tu modelo
-        if user and check_password_hash(user.password, password):
-            # login correcto: redirige o crea session/jwt, etc.
-            return redirect(url_for("users.listar_usuarios"))
-        else:
-            flash("Credenciales inválidas", "error")
+    email = data.get("email")
+    password = data.get("password")
 
-    return render_template("auth/login.html")
+    if not email or not password:
+        return jsonify({"success": False, "message": "Email y contraseña son obligatorios"}), 400
+
+    user = User.get_by_email(email)  
+    if not user:
+        return jsonify({"success": False, "message": "Usuario no encontrado"}), 404
+
+    if not check_password_hash(user.password, password):
+        return jsonify({"success": False, "message": "Contraseña incorrecta"}), 401
+
+    # Aquí puedes usar tu AuthService para generar token y sesión
+    response, status = AuthService.login(email, password)
+    return jsonify(response), status
 
 
 # Recuperar contraseña (HU1.3)
