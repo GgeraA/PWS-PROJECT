@@ -10,6 +10,8 @@ from utils.audit_helper import log_event
 from models.user import User
 from passlib.hash import bcrypt
 from datetime import datetime, timedelta
+from models.user_session import UserSession
+
 
 class AuthService:
 
@@ -143,16 +145,59 @@ class AuthService:
     def login(email, password):
         user = User.find_by_email(email)
         if not user:
-            return {"error": "Usuario no encontrado"}, 404
+            return {"success": False, "message": "Usuario no encontrado"}, 404
 
         if not bcrypt.verify(password, user.password):
-            return {"error": "Contraseña incorrecta"}, 401
+            return {"success": False, "message": "Contraseña incorrecta"}, 401
 
+        # Revisar si ya existe sesión activa
+        active_session = UserSession.query.filter_by(user_id=user.id, is_active=True).first()
+        if active_session:
+            return {
+                "success": False,
+                "message": "Ya existe una sesión activa para este usuario. ¿Desea cerrarla?"
+            }, 409
+
+        # Crear nueva sesión
         payload = {
             "user_id": user.id,
             "email": user.email,
             "role": user.rol,
             "exp": datetime.datetime.utcnow() + datetime.timedelta(seconds=Config.JWT_EXP_DELTA_SECONDS)
         }
+        
         token = jwt.encode(payload, Config.SECRET_KEY, algorithm="HS256")
-        return {"message": "Inicio de sesión exitoso", "token": token}, 200
+
+        new_session = UserSession(
+            user_id=user.id,
+            session_token=token,
+            created_at=datetime.datetime.utcnow(),
+            expires_at=datetime.datetime.utcnow() + datetime.timedelta(seconds=Config.JWT_EXP_DELTA_SECONDS),
+            is_active=True
+        )
+        new_session.save()
+
+        return {
+            "success": True,
+            "message": "Inicio de sesión exitoso",
+            "token": token,
+            "usuario": {
+                "id": user.id,
+                "nombre": user.nombre,
+                "email": user.email,
+                "rol": user.rol
+            }
+        }, 200
+        
+# ---------------- logout ---------------------
+    @staticmethod
+    def logout(session_token):
+        session = UserSession.query.filter_by(session_token=session_token, is_active=True).first()
+        if not session:
+            return {"success": False, "message": "Sesión no encontrada o ya cerrada"}, 404
+
+        session.is_active = False
+        session.save()
+
+        return {"success": True, "message": "Sesión cerrada correctamente"}, 200
+
