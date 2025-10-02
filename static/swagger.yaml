@@ -56,35 +56,75 @@ paths:
           description: Error de validación (correo o contraseña inválidos)
 
 
-  /auth/login:
-    post:
-      summary: Inicio de sesión
-      description: Permite iniciar sesión y recibir un token JWT.
-      tags:
-        - Autenticación
-      requestBody:
-        required: true
+/auth/login:
+  post:
+    summary: Inicio de sesión
+    description: Permite iniciar sesión y recibir un token JWT.
+    tags:
+      - Autenticación
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required:
+              - email
+              - password
+            properties:
+              email:
+                type: string
+                example: "gerardo@gmail.com"
+              password:
+                type: string
+                example: "Passw0rd!"
+    responses:
+      "200":
+        description: Inicio de sesión exitoso
         content:
           application/json:
             schema:
               type: object
-              required:
-                - email
-                - password
               properties:
-                email:
-                  type: string
-                  example: "gerardo@gmail.com"
-                password:
-                  type: string
-                  example: "Passw0rd!"
-      responses:
-        "200":
-          description: Inicio de sesión exitoso
-        "400":
-          description: Campos obligatorios faltantes
-        "401":
-          description: Credenciales inválidas
+                success: { type: boolean }
+                message: { type: string }
+                token: { type: string }
+                usuario:
+                  type: object
+                  properties:
+                    id: { type: integer }
+                    nombre: { type: string }
+                    email: { type: string }
+                    rol: { type: string }
+      "401":
+        description: Credenciales inválidas
+      "409":
+        description: Sesión ya activa
+
+/auth/logout:
+  post:
+    summary: Cerrar sesión
+    description: Cierra la sesión activa de un usuario.
+    tags:
+      - Autenticación
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required:
+              - token
+            properties:
+              token:
+                type: string
+                example: "JWT-TOKEN-HERE"
+    responses:
+      "200":
+        description: Sesión cerrada correctamente
+      "404":
+        description: Sesión no encontrada o ya cerrada
+
 
   /roles/assign:
     put:

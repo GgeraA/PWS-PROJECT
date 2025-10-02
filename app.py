@@ -1,4 +1,5 @@
 from flask import Flask
+from flask_cors import CORS
 from routes.main import main_bp
 from routes.auth import auth_bp
 from routes.users import users_bp
@@ -9,6 +10,9 @@ from routes.roles import roles_bp
 def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)  # Carga config desde config.py
+    
+    # Habilitar CORS
+    CORS(app)
     
         # Swagger UI
     SWAGGER_URL = "/docs"
