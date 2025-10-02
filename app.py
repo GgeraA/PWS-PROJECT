@@ -1,30 +1,31 @@
 from flask import Flask
-from routes.main import main_bp
-from routes.auth import auth_bp
-from routes.users import users_bp
+from flask_restx import Api
 from config import Config
-from flask_swagger_ui import get_swaggerui_blueprint
-from routes.roles import roles_bp
+
+# Importar blueprints convertidos en namespaces RESTX
+from routes.products import api as products_ns
+#from routes.users import api as users_ns
+#from routes.auth import api as auth_ns
+#from routes.roles import api as roles_ns
 
 def create_app():
     app = Flask(__name__)
-    app.config.from_object(Config)  # Carga config desde config.py
-    
-        # Swagger UI
-    SWAGGER_URL = "/docs"
-    API_URL = "/static/swagger.yaml"
-    swaggerui_blueprint = get_swaggerui_blueprint(
-        SWAGGER_URL,
-        API_URL,
-        config={"app_name": "PWS Project API"}
-    )
-    app.register_blueprint(swaggerui_blueprint, url_prefix=SWAGGER_URL)
+    app.config.from_object(Config)
 
-    # Registrar Blueprints
-    app.register_blueprint(main_bp, url_prefix="/")
-    app.register_blueprint(auth_bp, url_prefix="/auth")
-    app.register_blueprint(users_bp, url_prefix="/user")
-    app.register_blueprint(roles_bp, url_prefix="/roles")
+    # 🚀 Inicializar Flask-RESTX API
+    api = Api(
+        app,
+        version="1.0",
+        title="PWS Project API",
+        description="API para el punto de venta en Flask con documentación automática",
+        doc="/docs"  # Ruta donde estará la documentación Swagger UI
+    )
+
+    # 🔹 Registrar Namespaces (en lugar de blueprints normales)
+    api.add_namespace(products_ns, path="/products")
+    #api.add_namespace(users_ns, path="/users")
+    #api.add_namespace(auth_ns, path="/auth")
+    #api.add_namespace(roles_ns, path="/roles")
 
     return app
 
