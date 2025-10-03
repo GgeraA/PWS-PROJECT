@@ -24,10 +24,10 @@ def create_app():
         version="1.0",
         title="PWS Project API",
         description="API para el punto de venta en Flask con documentación automática",
-        doc="/docs"  # Ruta donde estará la documentación Swagger UI
+        doc="/docs"  # Ruta donde estará Swagger UI
     )
 
-    # 🔹 Registrar Namespaces (en lugar de blueprints normales)
+    # 🔹 Registrar Namespaces
     api.add_namespace(products_ns, path="/products")
     api.add_namespace(suppliers_ns, path="/suppliers")
     api.add_namespace(sales_ns, path="/sales")
