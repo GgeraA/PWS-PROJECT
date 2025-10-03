@@ -1,73 +1,96 @@
-# app/routes/products.py
 from flask_restx import Namespace, Resource, fields
-from services.product_service import (
-    create_product,
-    get_all_products,
-    get_product,
-    update_product,
-    delete_product
+from services.user_service import (
+    register_user,
+    login_user,
+    get_all_users,
+    get_user,
+    update_user,
+    delete_user
 )
 
 # 🔹 Definir namespace
-api = Namespace("products", description="Operaciones relacionadas con productos")
+api = Namespace("users", description="Operaciones relacionadas con usuarios")
 
 # 🔹 Modelo para Swagger
-product_model = api.model("Product", {
-    "Product_ID": fields.Integer(readonly=True, description="ID del producto"),
-    "Code": fields.String(required=True, description="Código único del producto"),
-    "Name": fields.String(required=True, description="Nombre del producto"),
-    "Description": fields.String(description="Descripción del producto"),
-    "Category": fields.String(description="Categoría"),
-    "Unit": fields.String(description="Unidad de medida"),
-    "Minimum_Stock": fields.Integer(description="Stock mínimo"),
-    "Current_Stock": fields.Integer(description="Stock actual"),
-    "Price": fields.Float(required=True, description="Precio del producto")
+user_model = api.model("User", {
+    "id": fields.Integer(readonly=True, description="ID del usuario"),
+    "nombre": fields.String(required=True, description="Nombre del usuario"),
+    "email": fields.String(required=True, description="Correo electrónico"),
+    "password": fields.String(required=True, description="Contraseña del usuario"),
+    "rol": fields.String(description="Rol del usuario (ej. admin, user)"),
+    "two_factor_enabled": fields.Boolean(description="Indica si 2FA está habilitado"),
+    "two_factor_secret": fields.String(description="Secreto para 2FA")
 })
 
+login_model = api.model("Login", {
+    "email": fields.String(required=True, description="Correo electrónico"),
+    "password": fields.String(required=True, description="Contraseña")
+})
 
 # -------------------------
-# Endpoints CRUD
+# Endpoints CRUD + Login
 # -------------------------
 
 @api.route("/")
-class ProductList(Resource):
-    @api.marshal_list_with(product_model)
+class UserList(Resource):
+    @api.marshal_list_with(user_model)
     def get(self):
-        """Obtener todos los productos"""
-        return get_all_products()
+        """Obtener todos los usuarios"""
+        return get_all_users()
 
-    @api.expect(product_model)
-    @api.response(201, "Producto creado")
+    @api.expect(user_model)
+    @api.response(201, "Usuario registrado")
     def post(self):
-        """Crear un nuevo producto"""
+        """Registrar un nuevo usuario"""
         data = api.payload
-        return create_product(data), 201
+        user = register_user(data)
+        if not user:
+            api.abort(400, "El email ya está registrado")
+        return user, 201
 
 
-@api.route("/<int:product_id>")
-@api.param("product_id", "El ID del producto")
-class Product(Resource):
-    @api.marshal_with(product_model)
-    def get(self, product_id):
-        """Obtener un producto por ID"""
-        product = get_product(product_id)
-        if not product:
-            api.abort(404, "Producto no encontrado")
-        return product
+@api.route("/<int:user_id>")
+@api.param("user_id", "El ID del usuario")
+class User(Resource):
+    @api.marshal_with(user_model)
+    def get(self, user_id):
+        """Obtener un usuario por ID"""
+        user = get_user(user_id)
+        if not user:
+            api.abort(404, "Usuario no encontrado")
+        return user
 
-    @api.expect(product_model)
-    def put(self, product_id):
-        """Actualizar un producto existente"""
+    @api.expect(user_model)
+    def put(self, user_id):
+        """Actualizar un usuario existente"""
         data = api.payload
-        product = update_product(product_id, data)
-        if not product:
-            api.abort(404, "Producto no encontrado")
-        return product
+        user = update_user(user_id, data)
+        if not user:
+            api.abort(404, "Usuario no encontrado")
+        return user
 
-    @api.response(204, "Producto eliminado")
-    def delete(self, product_id):
-        """Eliminar un producto"""
-        success = delete_product(product_id)
+    @api.response(204, "Usuario eliminado")
+    def delete(self, user_id):
+        """Eliminar un usuario"""
+        success = delete_user(user_id)
         if not success:
-            api.abort(404, "Producto no encontrado")
+            api.abort(404, "Usuario no encontrado")
         return "", 204
+
+
+@api.route("/login")
+class UserLogin(Resource):
+    @api.expect(login_model)
+    def post(self):
+        """Iniciar sesión"""
+        data = api.payload
+        user = login_user(data["email"], data["password"])
+        if not user:
+            api.abort(401, "Credenciales inválidas")
+        return {"message": "Login exitoso", "user": {
+            "id": user.id,
+            "nombre": user.nombre,
+            "email": user.email,
+            "rol": user.rol,
+            "two_factor_enabled": user.two_factor_enabled
+        }}

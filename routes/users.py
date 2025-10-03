@@ -1,26 +1,34 @@
-from flask import Blueprint, render_template, request, redirect, url_for
+from flask_restx import Namespace, Resource, fields
 from models.user import User
-from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.security import generate_password_hash
 
+# Crear Namespace para usuarios
+api = Namespace("users", description="Operaciones de usuarios")
 
-users_bp = Blueprint("users", __name__)
+# Modelo para documentación Swagger
+user_model = api.model('User', {
+    'nombre': fields.String(required=True, description='Nombre del usuario'),
+    'email': fields.String(required=True, description='Email del usuario'),
+    'password': fields.String(required=True, description='Contraseña del usuario'),
+    'rol': fields.String(required=True, description='Rol del usuario')
+})
 
-@users_bp.route("/")
-def listar_usuarios():
-    usuarios = User.get_all()
-    return render_template("users/usuarios.html", usuarios=usuarios)
+# Endpoint para listar todos los usuarios
+@api.route("/login")
+class UsersList(Resource):
+    def get(self):
+        usuarios = User.get_all()
+        return [{"nombre": u.nombre, "email": u.email, "rol": u.rol} for u in usuarios]
 
-@users_bp.route("/nuevo", methods=["GET", "POST"])
-def nuevo_usuario():
-    if request.method == "POST":
-        nombre = request.form["nombre"]
-        email = request.form["email"]
-        password = request.form["password"]
-        rol = request.form["rol"]
-
-        hashed = generate_password_hash(password)  # por defecto PBKDF2+sha256
-        user = User(nombre=nombre, email=email, password=hashed, rol=rol)
+    @api.expect(user_model)
+    def post(self):
+        data = api.payload
+        hashed = generate_password_hash(data['password'])
+        user = User(
+            nombre=data['nombre'],
+            email=data['email'],
+            password=hashed,
+            rol=data['rol']
+        )
         user.save()
-        return redirect(url_for("users.listar_usuarios"))
-
-    return render_template("users/nuevo_usuario.html")
+        return {"message": "Usuario creado"}, 201
