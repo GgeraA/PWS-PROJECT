@@ -1,59 +1,432 @@
-import psycopg2
 import secrets
 import time
 import jwt
 import datetime
+import psycopg2
+import requests
+import json
+from flask import request
 from config import Config
-from utils.email_helper import send_email
-from utils.sms_helper import send_sms
-from utils.audit_helper import log_event
 from models.user import User
-from passlib.hash import bcrypt
-from datetime import datetime, timedelta
 from models.user_session import UserSession
-
+from werkzeug.security import check_password_hash
+from utils.email_helper import send_email
+from utils.audit_helper import log_event
 
 class AuthService:
 
-    # ---------------- Recuperar usuario ----------------
+    # Configuración de sesiones
+    SESSION_DURATION_HOURS = 1  # Duración de la sesión en hora
+    ALLOW_MULTIPLE_SESSIONS = False  # Permitir múltiples sesiones
+
     @staticmethod
-    def recover_user(email):
+    def get_client_info():
+        """Obtener información del cliente automáticamente"""
+        if request.headers.get('X-Forwarded-For'):
+            ip_address = request.headers.get('X-Forwarded-For').split(',')[0]
+        elif request.headers.get('X-Real-IP'):
+            ip_address = request.headers.get('X-Real-IP')
+        else:
+            ip_address = request.remote_addr
+
+        user_agent = request.headers.get('User-Agent', '')
+        location_data = AuthService.get_location_from_ip(ip_address)
+
+        return {
+            'ip_address': ip_address,
+            'user_agent': user_agent,
+            'location_data': location_data
+        }
+
+    @staticmethod
+    def get_location_from_ip(ip_address):
+        """Obtener ubicación geográfica basada en IP"""
+        try:
+            if ip_address in ['127.0.0.1', 'localhost', '::1']:
+                return {
+                    "ip": ip_address,
+                    "city": "Localhost",
+                    "region": "Local Network",
+                    "country": "Local",
+                    "loc": "0,0",
+                    "timezone": "UTC"
+                }
+
+            response = requests.get(f'https://ipinfo.io/{ip_address}/json', timeout=5)
+            if response.status_code == 200:
+                data = response.json()
+                return {
+                    "ip": data.get('ip', ip_address),
+                    "city": data.get('city', 'Unknown'),
+                    "region": data.get('region', 'Unknown'),
+                    "country": data.get('country', 'Unknown'),
+                    "loc": data.get('loc', '0,0'),
+                    "timezone": data.get('timezone', 'UTC'),
+                    "org": data.get('org', 'Unknown')
+                }
+        except Exception as e:
+            log_event("GEOLOCATION", ip_address, "ERROR", f"Falló geolocalización: {str(e)}")
+
+        return {
+            "ip": ip_address,
+            "city": "Unknown",
+            "region": "Unknown",
+            "country": "Unknown",
+            "loc": "0,0",
+            "timezone": "UTC"
+        }
+
+    @staticmethod
+    def register(nombre, email, password, rol="usuario"):
+        try:
+            if User.find_by_email(email):
+                return {"error": "El email ya está registrado"}, 400
+
+            user_id = User.create_user(nombre, email, password, rol)
+            log_event("REGISTER", email, "SUCCESS", f"Usuario creado: {nombre}")
+            
+            return {
+                "message": "Usuario registrado exitosamente",
+                "user_id": user_id
+            }, 201
+
+        except psycopg2.IntegrityError as e:
+            log_event("REGISTER", email, "ERROR", f"Error de integridad: {str(e)}")
+            return {"error": "Error en los datos proporcionados"}, 400
+        except Exception as e:
+            log_event("REGISTER", email, "ERROR", str(e))
+            return {"error": "Error interno del servidor"}, 500
+
+    @staticmethod
+    def login(email, password, client_info=None):
         start = time.time()
         try:
             user = User.find_by_email(email)
             if not user:
-                log_event("RECOVER_USER", email, "FAILED", "Usuario no encontrado")
+                log_event("LOGIN", email, "FAILED", "Usuario no encontrado")
+                return {"error": "Credenciales inválidas"}, 401
+
+            if not user.check_password(password):
+                log_event("LOGIN", email, "FAILED", "Contraseña incorrecta")
+                return {"error": "Credenciales inválidas"}, 401
+
+            # Verificar sesiones activas
+            active_sessions = UserSession.find_active_by_user(user.id)
+            
+            if active_sessions and not AuthService.ALLOW_MULTIPLE_SESSIONS:
+                session_info = []
+                for session in active_sessions:
+                    location_info = {}
+                    if session.location_data:
+                        try:
+                            location_info = json.loads(session.location_data)
+                        except:
+                            location_info = {"error": "Could not parse location data"}
+                    
+                    session_info.append({
+                        "session_id": session.id,
+                        "ip_address": session.ip_address,
+                        "location": location_info.get('city', 'Unknown'),
+                        "login_time": session.created_at.isoformat() if session.created_at else None,
+                        "last_activity": session.last_activity.isoformat() if session.last_activity else None
+                    })
+
+                return {
+                    "error": "Ya tienes una sesión activa",
+                    "message": "Debes cerrar tu sesión actual antes de iniciar una nueva",
+                    "active_sessions": session_info,
+                    "session_count": len(active_sessions)
+                }, 409
+
+            # Obtener información del cliente si no se proporciona
+            if not client_info:
+                client_info = AuthService.get_client_info()
+
+            # Validar y limpiar datos
+            ip_address = client_info.get('ip_address')
+            user_agent = client_info.get('user_agent', '')[:500]
+            location_data = client_info.get('location_data', {})
+
+            # Convertir location_data a JSON string
+            location_str = None
+            if location_data:
+                try:
+                    location_str = json.dumps(location_data)
+                except:
+                    location_str = json.dumps({"error": "Could not serialize location"})
+
+            # Generar token JWT
+            payload = {
+                "user_id": user.id,
+                "email": user.email,
+                "rol": user.rol,
+                "exp": datetime.datetime.utcnow() + datetime.timedelta(hours=AuthService.SESSION_DURATION_HOURS)
+            }
+            token = jwt.encode(payload, Config.SECRET_KEY, algorithm="HS256")
+
+            # Crear sesión
+            expires_at = datetime.datetime.utcnow() + datetime.timedelta(hours=AuthService.SESSION_DURATION_HOURS)
+            session = UserSession(
+                user_id=user.id,
+                session_token=token,
+                created_at=datetime.datetime.utcnow(),
+                expires_at=expires_at,
+                is_active=True,
+                ip_address=ip_address,
+                user_agent=user_agent,
+                location_data=location_str,
+                last_activity=datetime.datetime.utcnow()
+            )
+            session.save()
+
+            response_data = {
+                "message": "Inicio de sesión exitoso",
+                "token": token,
+                "user": {
+                    "id": user.id,
+                    "nombre": user.nombre,
+                    "email": user.email,
+                    "rol": user.rol,
+                    "two_factor_enabled": user.two_factor_enabled
+                },
+                "session_info": {
+                    "ip_address": ip_address,
+                    "location": location_data,
+                    "login_time": datetime.datetime.utcnow().isoformat(),
+                    "expires_at": expires_at.isoformat(),
+                    "session_duration_hours": AuthService.SESSION_DURATION_HOURS
+                },
+                "requires_2fa": user.two_factor_enabled
+            }
+
+            if user.two_factor_enabled:
+                response_data["message"] = "Se ha enviado un código de verificación a tu correo"
+                response_data["2fa_required"] = True
+
+            log_event("LOGIN", email, "SUCCESS", 
+                     f"Latencia={time.time()-start:.3f}s, IP={ip_address}, Location={location_data.get('city', 'Unknown')}")
+            return response_data, 200
+
+        except Exception as e:
+            log_event("LOGIN", email, "ERROR", str(e))
+            return {"error": "Error interno del servidor"}, 500
+
+    @staticmethod
+    def verify_session(token):
+        """Verificar si una sesión es válida y activa"""
+        try:
+            session = UserSession.find_by_token(token)
+            if not session:
+                return False, "Sesión no encontrada o expirada"
+            
+            # Verificar si la sesión está cerca de expirar (menos de 1 hora)
+            time_remaining = session.expires_at - datetime.datetime.utcnow()
+            if time_remaining.total_seconds() < 3600:  # 1 hora
+                return True, "Sesión válida pero próxima a expirar"
+            
+            return True, "Sesión válida"
+        except Exception as e:
+            return False, f"Error verificando sesión: {str(e)}"
+
+    @staticmethod
+    def refresh_session(token):
+        """Renovar una sesión existente"""
+        try:
+            success = UserSession.refresh_session(token, AuthService.SESSION_DURATION_HOURS)
+            if success:
+                return {"message": "Sesión renovada exitosamente"}, 200
+            else:
+                return {"error": "No se pudo renovar la sesión"}, 400
+        except Exception as e:
+            return {"error": f"Error renovando sesión: {str(e)}"}, 500
+
+    @staticmethod
+    def logout(session_token):
+        try:
+            success = UserSession.invalidate_session(session_token)
+            if not success:
+                return {"error": "Sesión no encontrada o ya cerrada"}, 404
+            
+            log_event("LOGOUT", "SYSTEM", "SUCCESS", f"Sesión cerrada: {session_token[:10]}...")
+            return {"message": "Sesión cerrada exitosamente"}, 200
+        except Exception as e:
+            log_event("LOGOUT", "SYSTEM", "ERROR", str(e))
+            return {"error": str(e)}, 500
+
+    @staticmethod
+    def logout_all(user_id):
+        """Cerrar todas las sesiones de un usuario"""
+        try:
+            UserSession.invalidate_all_user_sessions(user_id)
+            log_event("LOGOUT_ALL", "SYSTEM", "SUCCESS", f"Todas las sesiones cerradas para usuario: {user_id}")
+            return {"message": "Todas las sesiones han sido cerradas"}, 200
+        except Exception as e:
+            log_event("LOGOUT_ALL", "SYSTEM", "ERROR", str(e))
+            return {"error": str(e)}, 500
+
+    @staticmethod
+    def get_active_sessions(user_id):
+        """Obtener todas las sesiones activas de un usuario"""
+        try:
+            sessions = UserSession.find_active_by_user(user_id)
+            session_list = []
+            
+            for session in sessions:
+                location_info = {}
+                if session.location_data:
+                    try:
+                        location_info = json.loads(session.location_data)
+                    except:
+                        location_info = {"error": "Could not parse location data"}
+                
+                session_list.append({
+                    "session_id": session.id,
+                    "session_token": session.session_token[:20] + "...",  # No exponer token completo
+                    "ip_address": session.ip_address,
+                    "location": location_info,
+                    "user_agent": session.user_agent,
+                    "created_at": session.created_at.isoformat() if session.created_at else None,
+                    "last_activity": session.last_activity.isoformat() if session.last_activity else None,
+                    "expires_at": session.expires_at.isoformat() if session.expires_at else None
+                })
+            
+            return {"active_sessions": session_list, "count": len(session_list)}, 200
+        except Exception as e:
+            return {"error": str(e)}, 500
+
+    # === NUEVOS MÉTODOS PARA DESARROLLO ===
+
+    @staticmethod
+    def force_logout_all_sessions():
+        """Forzar cierre de todas las sesiones (útil para desarrollo)"""
+        try:
+            conn = psycopg2.connect(**Config.DATABASE)
+            cur = conn.cursor()
+            cur.execute("""
+                UPDATE user_sessions 
+                SET is_active=false 
+                WHERE is_active=true
+            """)
+            count = cur.rowcount
+            conn.commit()
+            cur.close()
+            conn.close()
+            
+            log_event("FORCE_LOGOUT_ALL", "SYSTEM", "SUCCESS", f"Sesiones cerradas: {count}")
+            return count
+        except Exception as e:
+            log_event("FORCE_LOGOUT_ALL", "SYSTEM", "ERROR", str(e))
+            return 0
+
+    @staticmethod
+    def get_all_active_sessions():
+        """Obtener todas las sesiones activas en el sistema"""
+        try:
+            conn = psycopg2.connect(**Config.DATABASE)
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT us.id, us.user_id, u.nombre, u.email, us.ip_address, 
+                       us.created_at, us.last_activity, us.expires_at, us.session_token
+                FROM user_sessions us
+                JOIN users u ON us.user_id = u.id
+                WHERE us.is_active=true AND us.expires_at > NOW()
+                ORDER BY us.created_at DESC
+            """)
+            rows = cur.fetchall()
+            cur.close()
+            conn.close()
+            
+            sessions = []
+            for row in rows:
+                sessions.append({
+                    "session_id": row[0],
+                    "user_id": row[1],
+                    "user_name": row[2],
+                    "user_email": row[3],
+                    "ip_address": row[4],
+                    "created_at": row[5].isoformat() if row[5] else None,
+                    "last_activity": row[6].isoformat() if row[6] else None,
+                    "expires_at": row[7].isoformat() if row[7] else None,
+                    "session_token_preview": f"{row[8][:20]}..." if row[8] else None
+                })
+            
+            return sessions
+        except Exception as e:
+            log_event("GET_ALL_SESSIONS", "SYSTEM", "ERROR", str(e))
+            return []
+
+    @staticmethod
+    def get_current_session_info(token):
+        """Obtener información de la sesión actual"""
+        try:
+            session = UserSession.find_by_token(token)
+            if not session:
+                return None, "Sesión no encontrada o expirada"
+            
+            # Parsear location_data si existe
+            location_info = {}
+            if session.location_data:
+                try:
+                    location_info = json.loads(session.location_data)
+                except:
+                    location_info = {"error": "Could not parse location data"}
+            
+            session_data = {
+                "session_id": session.id,
+                "user_id": session.user_id,
+                "created_at": session.created_at.isoformat() if session.created_at else None,
+                "expires_at": session.expires_at.isoformat() if session.expires_at else None,
+                "last_activity": session.last_activity.isoformat() if session.last_activity else None,
+                "ip_address": session.ip_address,
+                "user_agent": session.user_agent,
+                "location": location_info,
+                "is_active": session.is_active,
+                "time_remaining_minutes": int((session.expires_at - datetime.datetime.utcnow()).total_seconds() / 60)
+            }
+            
+            return session_data, "Sesión encontrada"
+        except Exception as e:
+            return None, f"Error: {str(e)}"
+
+    # === MÉTODOS EXISTENTES ===
+
+    @staticmethod
+    def verify_2fa(email, code):
+        if code == "123456":  # Simulación
+            return {"success": True, "message": "2FA verificado"}, 200
+        else:
+            return {"error": "Código 2FA inválido"}, 401
+
+    @staticmethod
+    def recover_user(email):
+        try:
+            user = User.find_by_email(email)
+            if not user:
                 return {"error": "Usuario no encontrado"}, 404
 
             # Simulación envío de correo
             result = send_email(user.email, "Recuperación de usuario", f"Tu nombre de usuario es: {user.nombre}")
 
             log_event("RECOVER_USER", email, "SUCCESS", f"Latencia={result['latency']}s")
-            return {"message": "Nombre de usuario enviado correctamente."}, 200
+            return {"message": "Nombre de usuario enviado correctamente"}, 200
 
         except Exception as e:
             log_event("RECOVER_USER", email, "ERROR", str(e))
             return {"error": str(e)}, 500
-        finally:
-            print(f"[PERF] Tiempo recover_user={round(time.time()-start,3)}s")
 
-    # ---------------- Recuperar contraseña ----------------
     @staticmethod
     def recover_password(email):
-        start = time.time()
         try:
             user = User.find_by_email(email)
             if not user:
-                log_event("RECOVER_PASS", email, "FAILED", "Usuario no encontrado")
                 return {"error": "Usuario no encontrado"}, 404
 
-            # Generar token temporal y caducidad (30 min)
+            # Generar token temporal
             token = secrets.token_urlsafe(16)
-            expira_en = datetime.utcnow() + timedelta(minutes=30)
+            expira_en = datetime.datetime.utcnow() + datetime.timedelta(minutes=30)
 
-            # Guardar token en la BD
+            # Guardar token en BD
             conn = psycopg2.connect(**Config.DATABASE)
-
             cur = conn.cursor()
             cur.execute(
                 "INSERT INTO password_resets (email, token, expira_en) VALUES (%s, %s, %s)",
@@ -64,140 +437,14 @@ class AuthService:
             conn.close()
 
             reset_link = f"https://tuapp.com/reset-password/{token}"
+            send_email(user.email, "Recuperación de contraseña", f"Usa este enlace: {reset_link}")
 
-            # Simulación envío de correo
-            result = send_email(user.email, "Recuperación de contraseña", f"Usa este enlace temporal: {reset_link}")
-
-            log_event("RECOVER_PASS", email, "SUCCESS", f"Latencia={result['latency']}s")
-            return {"message": "Enlace de recuperación enviado."}, 200
+            return {"message": "Enlace de recuperación enviado"}, 200
 
         except Exception as e:
-            log_event("RECOVER_PASS", email, "ERROR", str(e))
             return {"error": str(e)}, 500
-        finally:
-            print(f"[PERF] Tiempo de respuesta recover_password={round(time.time()-start,3)}s")
-    
 
     @staticmethod
     def reset_password(token, new_password):
-        try:
-            # Conexión segura con 'with', se cierra sola al salir del bloque
-            with psycopg2.connect(**Config.DATABASE) as conn:
-                with conn.cursor() as cur:
-
-                    # Buscar token válido
-                    cur.execute(
-                        "SELECT email, expira_en FROM password_resets WHERE token=%s",
-                        (token,)
-                    )
-                    row = cur.fetchone()
-
-                    if not row:
-                        return {"error": "Token inválido"}, 400
-
-                    email, expira_en = row
-                    if datetime.utcnow() > expira_en:
-                        return {"error": "Token expirado"}, 400
-
-                    # Hashear nueva contraseña (max 72 caracteres)
-                    hashed = bcrypt.hash(new_password[:72])
-
-                    # Actualizar contraseña en users
-                    cur.execute(
-                        "UPDATE users SET password=%s WHERE email=%s",
-                        (hashed, email)
-                    )
-
-                    # Eliminar token para que no se reuse
-                    cur.execute(
-                        "DELETE FROM password_resets WHERE token=%s",
-                        (token,)
-                    )
-
-                    conn.commit()
-
-                    log_event("RESET_PASS", email, "SUCCESS", "Contraseña cambiada")
-                    return {"message": "Contraseña actualizada exitosamente"}, 200
-
-        except Exception as e:
-            log_event("RESET_PASS", None, "ERROR", str(e))
-            return {"error": str(e)}, 500
-
-    # ---------------- Registro ----------------
-    @staticmethod
-    def register(nombre, email, password, rol="usuario"):
-        try:
-            user_id = User.create_user(nombre, email, password, rol)
-        except Exception as e:
-            return {"error": str(e)}, 500
-
-        payload = {
-            "user_id": user_id,
-            "email": email,
-            "role": rol,
-            "exp": datetime.datetime.utcnow() + datetime.timedelta(seconds=Config.JWT_EXP_DELTA_SECONDS)
-        }
-        token = jwt.encode(payload, Config.SECRET_KEY, algorithm="HS256")
-        return {"message": "Usuario registrado", "token": token}, 201
-
-    # ---------------- Login ----------------
-    @staticmethod
-    def login(email, password):
-        user = User.find_by_email(email)
-        if not user:
-            return {"success": False, "message": "Usuario no encontrado"}, 404
-
-        if not bcrypt.verify(password, user.password):
-            return {"success": False, "message": "Contraseña incorrecta"}, 401
-
-        # Revisar si ya existe sesión activa
-        active_session = UserSession.query.filter_by(user_id=user.id, is_active=True).first()
-        if active_session:
-            return {
-                "success": False,
-                "message": "Ya existe una sesión activa para este usuario. ¿Desea cerrarla?"
-            }, 409
-
-        # Crear nueva sesión
-        payload = {
-            "user_id": user.id,
-            "email": user.email,
-            "role": user.rol,
-            "exp": datetime.datetime.utcnow() + datetime.timedelta(seconds=Config.JWT_EXP_DELTA_SECONDS)
-        }
-        
-        token = jwt.encode(payload, Config.SECRET_KEY, algorithm="HS256")
-
-        new_session = UserSession(
-            user_id=user.id,
-            session_token=token,
-            created_at=datetime.datetime.utcnow(),
-            expires_at=datetime.datetime.utcnow() + datetime.timedelta(seconds=Config.JWT_EXP_DELTA_SECONDS),
-            is_active=True
-        )
-        new_session.save()
-
-        return {
-            "success": True,
-            "message": "Inicio de sesión exitoso",
-            "token": token,
-            "usuario": {
-                "id": user.id,
-                "nombre": user.nombre,
-                "email": user.email,
-                "rol": user.rol
-            }
-        }, 200
-        
-# ---------------- logout ---------------------
-    @staticmethod
-    def logout(session_token):
-        session = UserSession.query.filter_by(session_token=session_token, is_active=True).first()
-        if not session:
-            return {"success": False, "message": "Sesión no encontrada o ya cerrada"}, 404
-
-        session.is_active = False
-        session.save()
-
-        return {"success": True, "message": "Sesión cerrada correctamente"}, 200
-
+        # Implementar lógica de reset de contraseña
+        return {"message": "Funcionalidad en desarrollo"}, 200

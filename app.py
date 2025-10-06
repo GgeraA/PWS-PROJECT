@@ -1,22 +1,31 @@
 from flask import Flask
 from flask_restx import Api
 from config import Config
+from datetime import datetime
+import json
 
+# Custom JSON encoder para manejar datetime
+class CustomJSONEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, datetime):
+            return obj.isoformat()
+        return super().default(obj)
 
-
-# Importar blueprints convertidos en namespaces RESTX
+# Importar namespaces
 from routes.suppliers import api as suppliers_ns
 from routes.products import api as products_ns
 from routes.sales import api as sales_ns
-from routes.sale_details import api as sale_details_ns4
+from routes.sale_details import api as sale_details_ns
 from routes.movement_routes import api as movements_ns
-#from routes.users import api as users_ns
-#from routes.auth import api as auth_ns
-#from routes.roles import api as roles_ns
+from routes.user import api as users_ns
+from routes.auth import api as auth_ns
+from routes.roles import api as roles_ns
+from routes.dev import api as dev_ns
 
 def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
+    app.json_encoder = CustomJSONEncoder  # Usar el encoder personalizado
 
     # 🚀 Inicializar Flask-RESTX API
     api = Api(
@@ -24,18 +33,28 @@ def create_app():
         version="1.0",
         title="PWS Project API",
         description="API para el punto de venta en Flask con documentación automática",
-        doc="/docs"  # Ruta donde estará Swagger UI
+        doc="/docs",  # Ruta donde estará Swagger UI
+        authorizations={
+            'Bearer Auth': {
+                'type': 'apiKey',
+                'in': 'header',
+                'name': 'Authorization',
+                'description': 'Ingrese: Bearer <token>'
+            }
+        },
+        security='Bearer Auth'
     )
 
-    # 🔹 Registrar Namespaces
+    # Registrar Namespaces
     api.add_namespace(products_ns, path="/products")
     api.add_namespace(suppliers_ns, path="/suppliers")
     api.add_namespace(sales_ns, path="/sales")
-    api.add_namespace(sale_details_ns4, path="/sale-details")
+    api.add_namespace(sale_details_ns, path="/sale-details")
     api.add_namespace(movements_ns, path="/movements")
-    #api.add_namespace(users_ns, path="/users")
-    #api.add_namespace(auth_ns, path="/auth")
-    #api.add_namespace(roles_ns, path="/roles")
+    api.add_namespace(users_ns, path="/users")
+    api.add_namespace(auth_ns, path="/auth")
+    api.add_namespace(roles_ns, path="/roles")
+    api.add_namespace(dev_ns, path="/dev")
 
     return app
 
