@@ -16,7 +16,7 @@ from routes.suppliers import api as suppliers_ns
 from routes.products import api as products_ns
 from routes.sales import api as sales_ns
 from routes.sale_details import api as sale_details_ns
-from routes.movement_routes import api as movements_ns
+from routes.movement import api as movements_ns
 from routes.user import api as users_ns
 from routes.auth import api as auth_ns
 from routes.roles import api as roles_ns

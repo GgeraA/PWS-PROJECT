@@ -31,7 +31,7 @@ product_model = api.model("Product", {
 
 @api.route("/")
 class ProductList(Resource):
-    @api.marshal_list_with(product_model)
+    @api.marshal_list_with(product_model,mask=False)
     def get(self):
         """Obtener todos los productos"""
         return get_all_products()
@@ -44,10 +44,11 @@ class ProductList(Resource):
         return create_product(data), 201
 
 
+
 @api.route("/<int:product_id>")
 @api.param("product_id", "El ID del producto")
 class Product(Resource):
-    @api.marshal_with(product_model)
+    @api.marshal_with(product_model,mask=False)
     def get(self, product_id):
         """Obtener un producto por ID"""
         product = get_product(product_id)

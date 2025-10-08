@@ -20,6 +20,7 @@ def create_product(data):
 def get_all_products():
     return Product.get_all()
 
+
 # Obtener producto por ID
 def get_product(product_id):
     return Product.find_by_id(product_id)

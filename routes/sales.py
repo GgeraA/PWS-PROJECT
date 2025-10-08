@@ -13,7 +13,7 @@ sale_model = api.model("Sale", {
 
 @api.route("/")
 class SalesList(Resource):
-    @api.marshal_list_with(sale_model)
+    @api.marshal_list_with(sale_model,mask=False)
     def get(self):
         """Listar todas las ventas"""
         return get_all_sales()
@@ -28,7 +28,7 @@ class SalesList(Resource):
 @api.route("/<int:sale_id>")
 @api.response(404, "Sale not found")
 class SaleResource(Resource):
-    @api.marshal_with(sale_model)
+    @api.marshal_with(sale_model,mask=False)
     def get(self, sale_id):
         """Obtener una venta por ID"""
         sale = get_sale(sale_id)

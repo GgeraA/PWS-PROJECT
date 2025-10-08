@@ -16,6 +16,7 @@ class Product:
 
     # ---------- CRUD BÁSICO ----------
 
+
     @staticmethod
     def get_all():
         """Devuelve todos los productos"""

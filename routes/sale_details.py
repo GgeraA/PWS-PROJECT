@@ -17,7 +17,7 @@ sale_detail_model = api.model("SaleDetail", {
 
 @api.route("/")
 class SaleDetailList(Resource):
-    @api.marshal_list_with(sale_detail_model)
+    @api.marshal_list_with(sale_detail_model,mask=False)
     def get(self):
         """Listar todos los detalles de venta"""
         return get_all_sale_details()
@@ -32,7 +32,7 @@ class SaleDetailList(Resource):
 @api.route("/<int:detail_id>")
 @api.response(404, "Sale Detail not found")
 class SaleDetailResource(Resource):
-    @api.marshal_with(sale_detail_model)
+    @api.marshal_with(sale_detail_model,mask=False)
     def get(self, detail_id):
         """Obtener detalle de venta por ID"""
         detail = get_sale_detail(detail_id)

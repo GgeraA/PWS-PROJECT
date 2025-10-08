@@ -20,7 +20,7 @@ supplier_model = api.model("Supplier", {
 
 @api.route("/")
 class SupplierList(Resource):
-    @api.marshal_list_with(supplier_model)
+    @api.marshal_list_with(supplier_model,mask=False)
     def get(self):
         """Obtener todos los proveedores"""
         return get_all_suppliers()
@@ -35,7 +35,7 @@ class SupplierList(Resource):
 @api.route("/<int:supplier_id>")
 @api.param("supplier_id", "El ID del proveedor")
 class Supplier(Resource):
-    @api.marshal_with(supplier_model)
+    @api.marshal_with(supplier_model,mask=False)
     def get(self, supplier_id):
         """Obtener un proveedor por ID"""
         supplier = get_supplier(supplier_id)
