@@ -12,11 +12,14 @@ from models.user_session import UserSession
 from werkzeug.security import check_password_hash
 from utils.email_helper import send_email
 from utils.audit_helper import log_event
+import re
+import dns.resolver
+from email_validator import validate_email, EmailNotValidError
 
 class AuthService:
 
     # Configuración de sesiones
-    SESSION_DURATION_HOURS = 1  # Duración de la sesión en hora
+    SESSION_DURATION_HOURS = 1  # Duración de la sesión en una hora
     ALLOW_MULTIPLE_SESSIONS = False  # Permitir múltiples sesiones
 
     @staticmethod
@@ -76,29 +79,36 @@ class AuthService:
             "timezone": "UTC"
         }
 
-    @staticmethod
-    def register(nombre, email, password, rol="usuario"):
-        try:
-            if User.find_by_email(email):
-                return {"error": "El email ya está registrado"}, 400
+@staticmethod
+def register(nombre, email, password, rol="usuario"):
+    try:
+        # Validar datos antes de registrar
+        is_valid, errors = AuthService.validate_user_data(nombre, email, password)
+        if not is_valid:
+            return {"error": "Errores de validación", "details": errors}, 400
 
-            user_id = User.create_user(nombre, email, password, rol)
-            log_event("REGISTER", email, "SUCCESS", f"Usuario creado: {nombre}")
-            
-            return {
-                "message": "Usuario registrado exitosamente",
-                "user_id": user_id
-            }, 201
+        # Verificar si el email ya está registrado
+        if AuthService.is_email_already_registered(email):
+            return {"error": "El email ya está registrado"}, 400
 
-        except psycopg2.IntegrityError as e:
-            log_event("REGISTER", email, "ERROR", f"Error de integridad: {str(e)}")
-            return {"error": "Error en los datos proporcionados"}, 400
-        except Exception as e:
-            log_event("REGISTER", email, "ERROR", str(e))
-            return {"error": "Error interno del servidor"}, 500
+        # Si todo está bien, crear el usuario
+        user_id = User.create_user(nombre, email, password, rol)
+        log_event("REGISTER", email, "SUCCESS", f"Usuario creado: {nombre}")
+        
+        return {
+            "message": "Usuario registrado exitosamente",
+            "user_id": user_id
+        }, 201
 
-    @staticmethod
-    def login(email, password, client_info=None):
+    except psycopg2.IntegrityError as e:
+        log_event("REGISTER", email, "ERROR", f"Error de integridad: {str(e)}")
+        return {"error": "Error en los datos proporcionados"}, 400
+    except Exception as e:
+        log_event("REGISTER", email, "ERROR", str(e))
+        return {"error": "Error interno del servidor"}, 500
+
+@staticmethod
+def login(email, password, client_info=None):
         start = time.time()
         try:
             user = User.find_by_email(email)
@@ -211,8 +221,8 @@ class AuthService:
             log_event("LOGIN", email, "ERROR", str(e))
             return {"error": "Error interno del servidor"}, 500
 
-    @staticmethod
-    def verify_session(token):
+@staticmethod
+def verify_session(token):
         """Verificar si una sesión es válida y activa"""
         try:
             session = UserSession.find_by_token(token)
@@ -228,8 +238,8 @@ class AuthService:
         except Exception as e:
             return False, f"Error verificando sesión: {str(e)}"
 
-    @staticmethod
-    def refresh_session(token):
+@staticmethod
+def refresh_session(token):
         """Renovar una sesión existente"""
         try:
             success = UserSession.refresh_session(token, AuthService.SESSION_DURATION_HOURS)
@@ -240,8 +250,8 @@ class AuthService:
         except Exception as e:
             return {"error": f"Error renovando sesión: {str(e)}"}, 500
 
-    @staticmethod
-    def logout(session_token):
+@staticmethod
+def logout(session_token):
         try:
             success = UserSession.invalidate_session(session_token)
             if not success:
@@ -253,8 +263,8 @@ class AuthService:
             log_event("LOGOUT", "SYSTEM", "ERROR", str(e))
             return {"error": str(e)}, 500
 
-    @staticmethod
-    def logout_all(user_id):
+@staticmethod
+def logout_all(user_id):
         """Cerrar todas las sesiones de un usuario"""
         try:
             UserSession.invalidate_all_user_sessions(user_id)
@@ -264,8 +274,8 @@ class AuthService:
             log_event("LOGOUT_ALL", "SYSTEM", "ERROR", str(e))
             return {"error": str(e)}, 500
 
-    @staticmethod
-    def get_active_sessions(user_id):
+@staticmethod
+def get_active_sessions(user_id):
         """Obtener todas las sesiones activas de un usuario"""
         try:
             sessions = UserSession.find_active_by_user(user_id)
@@ -296,8 +306,8 @@ class AuthService:
 
     # === NUEVOS MÉTODOS PARA DESARROLLO ===
 
-    @staticmethod
-    def force_logout_all_sessions():
+@staticmethod
+def force_logout_all_sessions():
         """Forzar cierre de todas las sesiones (útil para desarrollo)"""
         try:
             conn = psycopg2.connect(**Config.DATABASE)
@@ -318,8 +328,8 @@ class AuthService:
             log_event("FORCE_LOGOUT_ALL", "SYSTEM", "ERROR", str(e))
             return 0
 
-    @staticmethod
-    def get_all_active_sessions():
+@staticmethod
+def get_all_active_sessions():
         """Obtener todas las sesiones activas en el sistema"""
         try:
             conn = psycopg2.connect(**Config.DATABASE)
@@ -355,8 +365,8 @@ class AuthService:
             log_event("GET_ALL_SESSIONS", "SYSTEM", "ERROR", str(e))
             return []
 
-    @staticmethod
-    def get_current_session_info(token):
+@staticmethod
+def get_current_session_info(token):
         """Obtener información de la sesión actual"""
         try:
             session = UserSession.find_by_token(token)
@@ -390,15 +400,15 @@ class AuthService:
 
     # === MÉTODOS EXISTENTES ===
 
-    @staticmethod
-    def verify_2fa(email, code):
+@staticmethod
+def verify_2fa(email, code):
         if code == "123456":  # Simulación
             return {"success": True, "message": "2FA verificado"}, 200
         else:
             return {"error": "Código 2FA inválido"}, 401
 
-    @staticmethod
-    def recover_user(email):
+@staticmethod
+def recover_user(email):
         try:
             user = User.find_by_email(email)
             if not user:
@@ -414,8 +424,8 @@ class AuthService:
             log_event("RECOVER_USER", email, "ERROR", str(e))
             return {"error": str(e)}, 500
 
-    @staticmethod
-    def recover_password(email):
+@staticmethod
+def recover_password(email):
         try:
             user = User.find_by_email(email)
             if not user:
@@ -444,7 +454,122 @@ class AuthService:
         except Exception as e:
             return {"error": str(e)}, 500
 
-    @staticmethod
-    def reset_password(token, new_password):
+@staticmethod
+def reset_password(token, new_password):
         # Implementar lógica de reset de contraseña
         return {"message": "Funcionalidad en desarrollo"}, 200
+
+# ----------------------------- Validaciones de Usuario y correo ------------------------------
+@staticmethod
+def validate_email_format(email):
+        """Validar formato de email básico con regex"""
+        pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+        return re.match(pattern, email) is not None
+
+@staticmethod
+def validate_email_domain(email):
+        """Validar dominio del email (verificar que el dominio existe)"""
+        try:
+            domain = email.split('@')[1]
+            # Verificar registros MX del dominio
+            mx_records = dns.resolver.resolve(domain, 'MX')
+            return len(mx_records) > 0
+        except:
+            return False
+
+@staticmethod
+def validate_email_comprehensive(email):
+        """Validación completa de email usando email-validator"""
+        try:
+            # Validar email con la librería email-validator
+            valid = validate_email(email)
+            return True, "Email válido"
+        except EmailNotValidError as e:
+            return False, str(e)
+
+@staticmethod
+def validate_password_strength(password):
+        """Validar fortaleza de la contraseña"""
+        if len(password) < 8:
+            return False, "La contraseña debe tener al menos 8 caracteres"
+        
+        # Verificar que tenga al menos una letra minúscula
+        if not re.search(r'[a-z]', password):
+            return False, "La contraseña debe tener al menos una letra minúscula"
+        
+        # Verificar que tenga al menos una letra mayúscula
+        if not re.search(r'[A-Z]', password):
+            return False, "La contraseña debe tener al menos una letra mayúscula"
+        
+        # Verificar que tenga al menos un número
+        if not re.search(r'\d', password):
+            return False, "La contraseña debe tener al menos un número"
+        
+        # Verificar que tenga al menos un carácter especial
+        if not re.search(r'[!@#$%^&*(),.?":{}|<>]', password):
+            return False, "La contraseña debe tener al menos un carácter especial (!@#$%^&* etc.)"
+        
+        # Verificar que no tenga espacios
+        if ' ' in password:
+            return False, "La contraseña no puede contener espacios"
+        
+        return True, "Contraseña válida"
+
+@staticmethod
+def validate_password_common(password):
+        """Verificar que la contraseña no sea común"""
+        common_passwords = [
+            'password', '12345678', '123456789', 'qwerty', 'abc123', 
+            'password1', '1234567', '123456', 'admin', 'welcome'
+        ]
+        
+        if password.lower() in common_passwords:
+            return False, "La contraseña es demasiado común"
+        
+        return True, "Contraseña aceptable"
+
+@staticmethod
+def validate_user_data(nombre, email, password):
+        """Validación completa de datos de usuario"""
+        errors = []
+        
+        # Validar nombre
+        if not nombre or len(nombre.strip()) < 2:
+            errors.append("El nombre debe tener al menos 2 caracteres")
+        elif len(nombre) > 50:
+            errors.append("El nombre no puede tener más de 50 caracteres")
+        
+        # Validar email
+        if not email:
+            errors.append("El email es requerido")
+        else:
+            # Validación básica con regex
+            if not AuthService.validate_email_format(email):
+                errors.append("El formato del email no es válido")
+            else:
+                # Validación más estricta (opcional, puedes comentar esto si no quieres verificar dominio)
+                # is_valid, email_error = AuthService.validate_email_comprehensive(email)
+                # if not is_valid:
+                #     errors.append(f"Email inválido: {email_error}")
+                pass
+        
+        # Validar contraseña
+        if not password:
+            errors.append("La contraseña es requerida")
+        else:
+            # Validar fortaleza
+            is_strong, password_error = AuthService.validate_password_strength(password)
+            if not is_strong:
+                errors.append(password_error)
+            
+            # Validar que no sea común
+            is_uncommon, common_error = AuthService.validate_password_common(password)
+            if not is_uncommon:
+                errors.append(common_error)
+        
+        return len(errors) == 0, errors
+
+@staticmethod
+def is_email_already_registered(email):
+        """Verificar si el email ya está registrado"""
+        return User.find_by_email(email) is not None
