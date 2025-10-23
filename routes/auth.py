@@ -4,6 +4,7 @@ from services.auth_service import AuthService
 import jwt
 from config import Config
 
+correoMensajes = "Correo electrónico"
 api = Namespace("auth", description="Endpoints de autenticación")
 
 # Parser para el header Authorization
@@ -13,13 +14,13 @@ auth_parser.add_argument('Authorization', location='headers', required=True,
 
 # Modelos para Swagger
 login_model = api.model("Login", {
-    "email": fields.String(required=True, description="Correo electrónico"),
+    "email": fields.String(required=True, description=correoMensajes),
     "password": fields.String(required=True, description="Contraseña")
 })
 
 register_model = api.model("Register", {
     "nombre": fields.String(required=True, description="Nombre completo"),
-    "email": fields.String(required=True, description="Correo electrónico"),
+    "email": fields.String(required=True, description=correoMensajes),
     "password": fields.String(required=True, description="Contraseña"),
     "rol": fields.String(description="Rol del usuario", default="usuario", enum=['admin', 'usuario', 'visitante'])
 })
@@ -29,16 +30,16 @@ logout_all_model = api.model("LogoutAll", {
 })
 
 verify_2fa_model = api.model("Verify2FA", {
-    "email": fields.String(required=True, description="Correo electrónico"),
+    "email": fields.String(required=True, description=correoMensajes),
     "code": fields.String(required=True, description="Código 2FA")
 })
 
 recover_user_model = api.model("RecoverUser", {
-    "email": fields.String(required=True, description="Correo electrónico")
+    "email": fields.String(required=True, description=correoMensajes)
 })
 
 recover_password_model = api.model("RecoverPassword", {
-    "email": fields.String(required=True, description="Correo electrónico")
+    "email": fields.String(required=True, description=correoMensajes)
 })
 
 reset_password_model = api.model("ResetPassword", {
