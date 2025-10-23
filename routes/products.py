@@ -8,6 +8,7 @@ from services.product_service import (
     delete_product
 )
 
+PRODUCT_NOT_FOUND = "Producto no encontrado"
 # 🔹 Definir namespace
 api = Namespace("products", description="Operaciones relacionadas con productos")
 
@@ -53,7 +54,7 @@ class Product(Resource):
         """Obtener un producto por ID"""
         product = get_product(product_id)
         if not product:
-            api.abort(404, "Producto no encontrado")
+            api.abort(404, PRODUCT_NOT_FOUND)
         return product
 
     @api.expect(product_model)
@@ -62,7 +63,7 @@ class Product(Resource):
         data = api.payload
         product = update_product(product_id, data)
         if not product:
-            api.abort(404, "Producto no encontrado")
+            api.abort(404, PRODUCT_NOT_FOUND)
         return product
 
     @api.response(204, "Producto eliminado")
@@ -70,5 +71,5 @@ class Product(Resource):
         """Eliminar un producto"""
         success = delete_product(product_id)
         if not success:
-            api.abort(404, "Producto no encontrado")
+            api.abort(404, PRODUCT_NOT_FOUND)
         return "", 204

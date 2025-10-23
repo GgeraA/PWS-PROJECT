@@ -10,35 +10,42 @@ from services.user_service import (
 )
 from services.auth_service import AuthService
 
-api = Namespace("users", description="Operaciones relacionadas con usuarios")
+NOMBRE_DEL_USUARIO = "Nombre del usuario"
+USUARIO_NO_ENCONTRADO = "Usuario no encontrado"
+CORREO_ELECTRONICO = "Correo electrónico"
+ROL_DEL_USUARIO = "Rol del usuario"
+API_NAMESPACE = "users"
+CONTRASENA = "Contraseña"
+DOS_FA_HABILITADO = "2FA habilitado"
+api = Namespace(API_NAMESPACE, description="Operaciones relacionadas con usuarios")
 
 # Modelos para Swagger
 user_model = api.model("User", {
     "id": fields.Integer(readonly=True, description="ID del usuario"),
-    "nombre": fields.String(required=True, description="Nombre del usuario"),
-    "email": fields.String(required=True, description="Correo electrónico"),
-    "password": fields.String(required=True, description="Contraseña"),
-    "rol": fields.String(description="Rol del usuario", default="user"),
-    "two_factor_enabled": fields.Boolean(description="2FA habilitado", default=False),
+    "nombre": fields.String(required=True, description=NOMBRE_DEL_USUARIO),
+    "email": fields.String(required=True, description=CORREO_ELECTRONICO),
+    "password": fields.String(required=True, description=CONTRASENA),
+    "rol": fields.String(description=ROL_DEL_USUARIO, default="user"),
+    "two_factor_enabled": fields.Boolean(description=DOS_FA_HABILITADO, default=False),
     "two_factor_secret": fields.String(description="Secreto 2FA"),
     "created_at": fields.DateTime(description="Fecha de creación"),
     "updated_at": fields.DateTime(description="Fecha de actualización")
 })
 
 user_register_model = api.model("UserRegister", {
-    "nombre": fields.String(required=True, description="Nombre del usuario"),
-    "email": fields.String(required=True, description="Correo electrónico"),
-    "password": fields.String(required=True, description="Contraseña"),
-    "rol": fields.String(description="Rol del usuario", default="usuario", enum=['admin', 'usuario', 'visitante']),
-    "two_factor_enabled": fields.Boolean(description="2FA habilitado", default=False)
+    "nombre": fields.String(required=True, description=NOMBRE_DEL_USUARIO),
+    "email": fields.String(required=True, description=CORREO_ELECTRONICO),
+    "password": fields.String(required=True, description=CONTRASENA),
+    "rol": fields.String(description=ROL_DEL_USUARIO, default="usuario", enum=['admin', 'usuario', 'visitante']),
+    "two_factor_enabled": fields.Boolean(description=DOS_FA_HABILITADO, default=False)
 })
 
 user_update_model = api.model("UserUpdate", {
-    "nombre": fields.String(description="Nombre del usuario"),
-    "email": fields.String(description="Correo electrónico"),
-    "password": fields.String(description="Contraseña"),
-    "rol": fields.String(description="Rol del usuario"),
-    "two_factor_enabled": fields.Boolean(description="2FA habilitado"),
+    "nombre": fields.String(description=NOMBRE_DEL_USUARIO),
+    "email": fields.String(description=CORREO_ELECTRONICO),
+    "password": fields.String(description=CONTRASENA),
+    "rol": fields.String(description=ROL_DEL_USUARIO),
+    "two_factor_enabled": fields.Boolean(description=DOS_FA_HABILITADO),
     "two_factor_secret": fields.String(description="Secreto 2FA")
 })
 
@@ -68,32 +75,32 @@ class UserList(Resource):
 @api.route("/<int:user_id>")
 class UserDetail(Resource):
     @api.marshal_with(user_model)
-    @api.response(404, "Usuario no encontrado")
+    @api.response(404, USUARIO_NO_ENCONTRADO)
     def get(self, user_id):
         """Obtener un usuario por ID"""
         user = get_user(user_id)
         if not user:
-            api.abort(404, "Usuario no encontrado")
+            api.abort(404, USUARIO_NO_ENCONTRADO)
         return user
 
     @api.expect(user_update_model)
     @api.marshal_with(user_model)
-    @api.response(404, "Usuario no encontrado")
+    @api.response(404, USUARIO_NO_ENCONTRADO)
     def put(self, user_id):
         """Actualizar un usuario"""
         data = api.payload
         user = update_user(user_id, data)
         if not user:
-            api.abort(404, "Usuario no encontrado")
+            api.abort(404, USUARIO_NO_ENCONTRADO)
         return user
 
     @api.response(204, "Usuario eliminado")
-    @api.response(404, "Usuario no encontrado")
+    @api.response(404, USUARIO_NO_ENCONTRADO)
     def delete(self, user_id):
         """Eliminar un usuario"""
         success = delete_user(user_id)
         if not success:
-            api.abort(404, "Usuario no encontrado")
+            api.abort(404, USUARIO_NO_ENCONTRADO)
         return "", 204
 
 @api.route("/roles/assign")
@@ -117,7 +124,7 @@ class RoleAssignment(Resource):
 
         success = assign_user_role(user_id, new_role)
         if not success:
-            api.abort(404, "Usuario no encontrado")
+            api.abort(404, USUARIO_NO_ENCONTRADO)
 
         return {"message": "Rol actualizado", "user_id": user_id, "role": new_role}, 200
 
