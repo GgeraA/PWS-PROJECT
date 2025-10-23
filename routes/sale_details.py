@@ -1,8 +1,9 @@
-# routes/sale_details.py
 from flask_restx import Namespace, Resource, fields
 from services.sale_detail_service import (
     create_sale_detail, get_all_sale_details, get_sale_detail, update_sale_detail, delete_sale_detail
 )
+
+NOT_FOUND_MSG = "Sale Detail not found"
 
 api = Namespace("sale-details", description="Sale Details operations")
 
@@ -30,14 +31,14 @@ class SaleDetailList(Resource):
 
 
 @api.route("/<int:detail_id>")
-@api.response(404, "Sale Detail not found")
+@api.response(404, NOT_FOUND_MSG)
 class SaleDetailResource(Resource):
     @api.marshal_with(sale_detail_model,mask=False)
     def get(self, detail_id):
         """Obtener detalle de venta por ID"""
         detail = get_sale_detail(detail_id)
         if not detail:
-            api.abort(404, "Sale Detail not found")
+            api.abort(404, NOT_FOUND_MSG)
         return detail
 
     @api.expect(sale_detail_model)
@@ -45,12 +46,12 @@ class SaleDetailResource(Resource):
         """Actualizar un detalle de venta"""
         detail = update_sale_detail(detail_id, api.payload)
         if not detail:
-            api.abort(404, "Sale Detail not found")
-        return {"message": "Sale detail updated"}
+            api.abort(404, NOT_FOUND_MSG)
+        return detil
 
     def delete(self, detail_id):
         """Eliminar un detalle de venta"""
         success = delete_sale_detail(detail_id)
         if not success:
-            api.abort(404, "Sale Detail not found")
-        return {"message": "Sale detail deleted"}
+            api.abort(404, NOT_FOUND_MSG)
+        return detail
