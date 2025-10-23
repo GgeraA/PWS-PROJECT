@@ -108,118 +108,121 @@ def register(nombre, email, password, rol="usuario"):
         return {"error": "Error interno del servidor"}, 500
 
 @staticmethod
+def _check_active_sessions(user_id):
+    active_sessions = UserSession.find_active_by_user(user_id)
+    if not active_sessions or AuthService.ALLOW_MULTIPLE_SESSIONS:
+        return None
+
+    session_info = []
+    for session in active_sessions:
+        location_info = {}
+        if session.location_data:
+            try:
+                location_info = json.loads(session.location_data)
+            except:
+                location_info = {"error": "Could not parse location data"}
+                raise
+
+        session_info.append({
+            "session_id": session.id,
+            "ip_address": session.ip_address,
+            "location": location_info.get('city', 'Unknown'),
+            "login_time": session.created_at.isoformat() if session.created_at else None,
+            "last_activity": session.last_activity.isoformat() if session.last_activity else None
+        })
+
+    return {
+        "error": "Ya tienes una sesión activa",
+        "message": "Debes cerrar tu sesión actual antes de iniciar una nueva",
+        "active_sessions": session_info,
+        "session_count": len(active_sessions)
+    }, 409
+
+@staticmethod
+def _create_session(user, client_info):
+    ip_address = client_info.get('ip_address')
+    user_agent = client_info.get('user_agent', '')[:500]
+    location_data = client_info.get('location_data', {})
+    location_str = json.dumps(location_data if location_data else {"error": "No location data"})
+
+    payload = {
+        "user_id": user.id,
+        "email": user.email,
+        "rol": user.rol,
+        "exp": datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=AuthService.SESSION_DURATION_HOURS)
+    }
+    token = jwt.encode(payload, Config.SECRET_KEY, algorithm="HS256")
+    expires_at = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=AuthService.SESSION_DURATION_HOURS)
+
+    session = UserSession(
+        user_id=user.id,
+        session_token=token,
+        created_at=datetime.datetime.now(datetime.timezone.utc),
+        expires_at=expires_at,
+        is_active=True,
+        ip_address=ip_address,
+        user_agent=user_agent,
+        location_data=location_str,
+        last_activity=datetime.datetime.now()
+    )
+    session.save()
+    return token, expires_at, ip_address, location_data
+
+@staticmethod
 def login(email, password, client_info=None):
-        start = time.time()
-        try:
-            user = User.find_by_email(email)
-            if not user:
-                log_event("LOGIN", email, "FAILED", "Usuario no encontrado")
-                return {"error": "Credenciales inválidas"}, 401
+    start = time.time()
+    try:
+        # Verificar credenciales
+        user = User.find_by_email(email)
+        if not user or not user.check_password(password):
+            log_event("LOGIN", email, "FAILED", "Credenciales inválidas")
+            return {"error": "Credenciales inválidas"}, 401
 
-            if not user.check_password(password):
-                log_event("LOGIN", email, "FAILED", "Contraseña incorrecta")
-                return {"error": "Credenciales inválidas"}, 401
+        # Verificar sesiones activas
+        session_check = AuthService._check_active_sessions(user.id)
+        if session_check:
+            return session_check
 
-            # Verificar sesiones activas
-            active_sessions = UserSession.find_active_by_user(user.id)
-            
-            if active_sessions and not AuthService.ALLOW_MULTIPLE_SESSIONS:
-                session_info = []
-                for session in active_sessions:
-                    location_info = {}
-                    if session.location_data:
-                        try:
-                            location_info = json.loads(session.location_data)
-                        except:
-                            location_info = {"error": "Could not parse location data"}
-                    
-                    session_info.append({
-                        "session_id": session.id,
-                        "ip_address": session.ip_address,
-                        "location": location_info.get('city', 'Unknown'),
-                        "login_time": session.created_at.isoformat() if session.created_at else None,
-                        "last_activity": session.last_activity.isoformat() if session.last_activity else None
-                    })
+        # Obtener información del cliente
+        if not client_info:
+            client_info = AuthService.get_client_info()
 
-                return {
-                    "error": "Ya tienes una sesión activa",
-                    "message": "Debes cerrar tu sesión actual antes de iniciar una nueva",
-                    "active_sessions": session_info,
-                    "session_count": len(active_sessions)
-                }, 409
+        # Crear sesión
+        token, expires_at, ip_address, location_data = AuthService._create_session(user, client_info)
 
-            # Obtener información del cliente si no se proporciona
-            if not client_info:
-                client_info = AuthService.get_client_info()
-
-            # Validar y limpiar datos
-            ip_address = client_info.get('ip_address')
-            user_agent = client_info.get('user_agent', '')[:500]
-            location_data = client_info.get('location_data', {})
-
-            # Convertir location_data a JSON string
-            location_str = None
-            if location_data:
-                try:
-                    location_str = json.dumps(location_data)
-                except:
-                    location_str = json.dumps({"error": "Could not serialize location"})
-
-            # Generar token JWT
-            payload = {
-                "user_id": user.id,
+        response_data = {
+            "message": "Inicio de sesión exitoso",
+            "token": token,
+            "user": {
+                "id": user.id,
+                "nombre": user.nombre,
                 "email": user.email,
                 "rol": user.rol,
-                "exp": datetime.datetime.utcnow() + datetime.timedelta(hours=AuthService.SESSION_DURATION_HOURS)
-            }
-            token = jwt.encode(payload, Config.SECRET_KEY, algorithm="HS256")
+                "two_factor_enabled": user.two_factor_enabled
+            },
+            "session_info": {
+                "ip_address": ip_address,
+                "location": location_data,
+                "login_time": datetime.datetime.now().isoformat(),
+                "expires_at": expires_at.isoformat(),
+                "session_duration_hours": AuthService.SESSION_DURATION_HOURS
+            },
+            "requires_2fa": user.two_factor_enabled
+        }
 
-            # Crear sesión
-            expires_at = datetime.datetime.utcnow() + datetime.timedelta(hours=AuthService.SESSION_DURATION_HOURS)
-            session = UserSession(
-                user_id=user.id,
-                session_token=token,
-                created_at=datetime.datetime.utcnow(),
-                expires_at=expires_at,
-                is_active=True,
-                ip_address=ip_address,
-                user_agent=user_agent,
-                location_data=location_str,
-                last_activity=datetime.datetime.utcnow()
-            )
-            session.save()
+        if user.two_factor_enabled:
+            response_data.update({
+                "message": "Se ha enviado un código de verificación a tu correo",
+                "2fa_required": True
+            })
 
-            response_data = {
-                "message": "Inicio de sesión exitoso",
-                "token": token,
-                "user": {
-                    "id": user.id,
-                    "nombre": user.nombre,
-                    "email": user.email,
-                    "rol": user.rol,
-                    "two_factor_enabled": user.two_factor_enabled
-                },
-                "session_info": {
-                    "ip_address": ip_address,
-                    "location": location_data,
-                    "login_time": datetime.datetime.utcnow().isoformat(),
-                    "expires_at": expires_at.isoformat(),
-                    "session_duration_hours": AuthService.SESSION_DURATION_HOURS
-                },
-                "requires_2fa": user.two_factor_enabled
-            }
+        log_event("LOGIN", email, "SUCCESS", 
+                 f"Latencia={time.time()-start:.3f}s, IP={ip_address}, Location={location_data.get('city', 'Unknown')}")
+        return response_data, 200
 
-            if user.two_factor_enabled:
-                response_data["message"] = "Se ha enviado un código de verificación a tu correo"
-                response_data["2fa_required"] = True
-
-            log_event("LOGIN", email, "SUCCESS", 
-                     f"Latencia={time.time()-start:.3f}s, IP={ip_address}, Location={location_data.get('city', 'Unknown')}")
-            return response_data, 200
-
-        except Exception as e:
-            log_event("LOGIN", email, "ERROR", str(e))
-            return {"error": "Error interno del servidor"}, 500
+    except Exception as e:
+        log_event("LOGIN", email, "ERROR", str(e))
+        return {"error": "Error interno del servidor"}, 500
 
 @staticmethod
 def verify_session(token):
@@ -230,7 +233,7 @@ def verify_session(token):
                 return False, "Sesión no encontrada o expirada"
             
             # Verificar si la sesión está cerca de expirar (menos de 1 hora)
-            time_remaining = session.expires_at - datetime.datetime.utcnow()
+            time_remaining = session.expires_at - datetime.datetime.now()
             if time_remaining.total_seconds() < 3600:  # 1 hora
                 return True, "Sesión válida pero próxima a expirar"
             
@@ -288,6 +291,7 @@ def get_active_sessions(user_id):
                         location_info = json.loads(session.location_data)
                     except:
                         location_info = {"error": "Could not parse location data"}
+                        raise
                 
                 session_list.append({
                     "session_id": session.id,
@@ -380,6 +384,7 @@ def get_current_session_info(token):
                     location_info = json.loads(session.location_data)
                 except:
                     location_info = {"error": "Could not parse location data"}
+                    raise
             
             session_data = {
                 "session_id": session.id,
@@ -391,7 +396,7 @@ def get_current_session_info(token):
                 "user_agent": session.user_agent,
                 "location": location_info,
                 "is_active": session.is_active,
-                "time_remaining_minutes": int((session.expires_at - datetime.datetime.utcnow()).total_seconds() / 60)
+                "time_remaining_minutes": int((session.expires_at - datetime.datetime.now()).total_seconds() / 60)
             }
             
             return session_data, "Sesión encontrada"
@@ -433,7 +438,7 @@ def recover_password(email):
 
             # Generar token temporal
             token = secrets.token_urlsafe(16)
-            expira_en = datetime.datetime.utcnow() + datetime.timedelta(minutes=30)
+            expira_en = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(minutes=30)
 
             # Guardar token en BD
             conn = psycopg2.connect(**Config.DATABASE)
@@ -476,13 +481,14 @@ def validate_email_domain(email):
             return len(mx_records) > 0
         except:
             return False
+            raise
 
 @staticmethod
 def validate_email_comprehensive(email):
         """Validación completa de email usando email-validator"""
         try:
             # Validar email con la librería email-validator
-            valid = validate_email(email)
+            validate_email(email)
             return True, "Email válido"
         except EmailNotValidError as e:
             return False, str(e)
