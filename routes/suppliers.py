@@ -8,6 +8,9 @@ from services.supplier_service import (
     delete_supplier
 )
 
+SUPPLIER_NOT_FOUND = "Proveedor no encontrado"
+
+
 api = Namespace("suppliers", description="Operaciones relacionadas con proveedores")
 
 # Modelo para Swagger
@@ -40,7 +43,7 @@ class Supplier(Resource):
         """Obtener un proveedor por ID"""
         supplier = get_supplier(supplier_id)
         if not supplier:
-            api.abort(404, "Proveedor no encontrado")
+            api.abort(404, SUPPLIER_NOT_FOUND)
         return supplier
 
     @api.expect(supplier_model)
@@ -49,7 +52,7 @@ class Supplier(Resource):
         data = api.payload
         supplier = update_supplier(supplier_id, data)
         if not supplier:
-            api.abort(404, "Proveedor no encontrado")
+            api.abort(404, SUPPLIER_NOT_FOUND)
         return supplier
 
     @api.response(204, "Proveedor eliminado")
@@ -57,5 +60,5 @@ class Supplier(Resource):
         """Eliminar un proveedor"""
         success = delete_supplier(supplier_id)
         if not success:
-            api.abort(404, "Proveedor no encontrado")
+            api.abort(404, SUPPLIER_NOT_FOUND)
         return "", 204
