@@ -3,16 +3,16 @@ import psycopg2
 from config import Config
 
 class Movement:
-    def __init__(self, Movement_ID=None, Date=None, Type=None, Product_ID=None,
-                 Quantity=0, Reference=None, Supplier_ID=None, User_ID=None):
-        self.Movement_ID = Movement_ID
-        self.Date = Date
-        self.Type = Type
-        self.Product_ID = Product_ID
-        self.Quantity = Quantity
-        self.Reference = Reference
-        self.Supplier_ID = Supplier_ID
-        self.User_ID = User_ID
+    def __init__(self, movement_id=None, date=None, type=None, product_id=None,
+                 quantity=0, reference=None, supplier_id=None, user_id=None):
+        self.movement_id = movement_id
+        self.date = date
+        self.type = type
+        self.product_id = product_id
+        self.quantity = quantity
+        self.reference = reference
+        self.supplier_id = supplier_id
+        self.user_id = user_id
 
     # ---------- CRUD BÁSICO ----------
 
@@ -55,12 +55,12 @@ class Movement:
             INSERT INTO Movements (Type, Product_ID, Quantity, Reference, Supplier_ID, User_ID)
             VALUES (%s, %s, %s, %s, %s, %s)
             RETURNING Movement_ID
-        """, (self.Type, self.Product_ID, self.Quantity, self.Reference, self.Supplier_ID, self.User_ID))
-        self.Movement_ID = cur.fetchone()[0]
+        """, (self.type, self.product_id, self.quantity, self.reference, self.supplier_id, self.user_id))
+        self.movement_id = cur.fetchone()[0]
         conn.commit()
         cur.close()
         conn.close()
-        return self.Movement_ID
+        return self.movement_id
 
     def update(self):
         """Actualiza movimiento existente"""
@@ -70,11 +70,11 @@ class Movement:
             UPDATE Movements
             SET Type=%s, Product_ID=%s, Quantity=%s, Reference=%s, Supplier_ID=%s, User_ID=%s
             WHERE Movement_ID=%s
-        """, (self.Type, self.Product_ID, self.Quantity, self.Reference, self.Supplier_ID, self.User_ID, self.Movement_ID))
+        """, (self.type, self.product_id, self.quantity, self.reference, self.supplier_id, self.user_id, self.movement_id))
         conn.commit()
         cur.close()
         conn.close()
-        return self.Movement_ID
+        return self.movement_id
 
     @staticmethod
     def delete(movement_id):
