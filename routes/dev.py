@@ -11,7 +11,7 @@ class ForceLogoutAll(Resource):
         try:
             count = AuthService.force_logout_all_sessions()
             return {
-                "message": f"Todas las sesiones activas han sido cerradas",
+                "message": "Todas las sesiones activas han sido cerradas",
                 "sessions_closed": count,
                 "warning": "⚠️ ESTO ES SOLO PARA DESARROLLO"
             }, 200
@@ -39,7 +39,7 @@ class CloseUserSessions(Resource):
         try:
             UserSession.invalidate_all_user_sessions(user_id)
             return {
-                "message": f"Todas las sesiones del usuario {user_id} han sido cerradas"
+                "message": "Todas las sesiones del usuario {user_id} han sido cerradas"
             }, 200
         except Exception as e:
             return {"error": str(e)}, 500
