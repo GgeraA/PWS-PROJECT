@@ -1,0 +1,8 @@
+Flask
+requests
+PyJWT
+psycopg2-binary
+pytest
+pytest-cov
+email-validator
+python-dotenv
