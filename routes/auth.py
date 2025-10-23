@@ -6,21 +6,37 @@ from config import Config
 
 api = Namespace("auth", description="Endpoints de autenticación")
 
-# Parser para el header Authorization
-auth_parser = reqparse.RequestParser()
-auth_parser.add_argument('Authorization', location='headers', required=True, 
-                        help='Token de autorización en formato: Bearer <token>')
+# ------------------ Constantes ------------------
+EMAIL_DESC = "Correo electrónico"
+PASSWORD_DESC = "Contraseña"
+BEARER = "Portador"
 
-# Modelos para Swagger
+ERR_FORMAT_TOKEN = f"Formato de token inválido. Use: {BEARER} <token>"
+ERR_TOKEN_REQUIRED = "Token de autorización requerido"
+ERR_TOKEN_INVALID = "Token inválido"
+ERR_TOKEN_EXPIRED = "Token expirado"
+ERR_USER_ID_REQUIRED = "user_id es requerido"
+ERR_ADMIN_ONLY = "Solo los administradores pueden usar este endpoint"
+
+# ------------------ Parser ------------------
+auth_parser = reqparse.RequestParser()
+auth_parser.add_argument(
+    'Authorization', 
+    location='headers', 
+    required=True, 
+    help=ERR_FORMAT_TOKEN
+)
+
+# ------------------ Modelos Swagger ------------------
 login_model = api.model("Login", {
-    "email": fields.String(required=True, description="Correo electrónico"),
-    "password": fields.String(required=True, description="Contraseña")
+    "email": fields.String(required=True, description=EMAIL_DESC),
+    "password": fields.String(required=True, description=PASSWORD_DESC)
 })
 
 register_model = api.model("Register", {
     "nombre": fields.String(required=True, description="Nombre completo"),
-    "email": fields.String(required=True, description="Correo electrónico"),
-    "password": fields.String(required=True, description="Contraseña"),
+    "email": fields.String(required=True, description=EMAIL_DESC),
+    "password": fields.String(required=True, description=PASSWORD_DESC),
     "rol": fields.String(description="Rol del usuario", default="usuario", enum=['admin', 'usuario', 'visitante'])
 })
 
@@ -29,22 +45,46 @@ logout_all_model = api.model("LogoutAll", {
 })
 
 verify_2fa_model = api.model("Verify2FA", {
-    "email": fields.String(required=True, description="Correo electrónico"),
+    "email": fields.String(required=True, description=EMAIL_DESC),
     "code": fields.String(required=True, description="Código 2FA")
 })
 
 recover_user_model = api.model("RecoverUser", {
-    "email": fields.String(required=True, description="Correo electrónico")
+    "email": fields.String(required=True, description=EMAIL_DESC)
 })
 
 recover_password_model = api.model("RecoverPassword", {
-    "email": fields.String(required=True, description="Correo electrónico")
+    "email": fields.String(required=True, description=EMAIL_DESC)
 })
 
 reset_password_model = api.model("ResetPassword", {
     "token": fields.String(required=True, description="Token de reset"),
     "new_password": fields.String(required=True, description="Nueva contraseña")
 })
+
+# ------------------ Funciones helper ------------------
+def extract_token():
+    """Extrae el token del header Authorization"""
+    args = auth_parser.parse_args()
+    auth_header = args.get('Authorization', '')
+    if not auth_header.startswith(f'{BEARER} '):
+        auth_header = request.headers.get('Authorization', '')
+        if not auth_header.startswith(f'{BEARER} '):
+            return None, {"error": ERR_FORMAT_TOKEN}, 401
+    token = auth_header.replace(f'{BEARER} ', '')
+    return token, None, None
+
+def decode_token(token):
+    """Decodifica JWT y devuelve payload o error"""
+    try:
+        payload = jwt.decode(token, Config.SECRET_KEY, algorithms=["HS256"])
+        return payload, None, None
+    except jwt.ExpiredSignatureError:
+        return None, {"error": ERR_TOKEN_EXPIRED}, 401
+    except jwt.InvalidTokenError:
+        return None, {"error": ERR_TOKEN_INVALID}, 401
+
+# ------------------ Endpoints ------------------
 
 @api.route("/register")
 class Register(Resource):
@@ -71,9 +111,7 @@ class Login(Resource):
     def post(self):
         """Iniciar sesión"""
         data = api.payload
-        
         client_info = AuthService.get_client_info()
-        
         result, status = AuthService.login(
             data.get('email'),
             data.get('password'),
@@ -89,46 +127,33 @@ class Logout(Resource):
     @api.response(404, "Sesión no encontrada")
     def post(self):
         """Cerrar sesión actual"""
-        args = auth_parser.parse_args()
-        auth_header = args.get('Authorization', '')
-        
-        if not auth_header.startswith('Bearer '):
-            # Si no hay token en los parámetros, intentar del header normal
-            auth_header = request.headers.get('Authorization', '')
-            if not auth_header.startswith('Bearer '):
-                return {"error": "Formato de token inválido. Use: Bearer <token>"}, 401
-            
-        token = auth_header.replace('Bearer ', '')
+        token, error, status = extract_token()
+        if error: 
+            return error, status
         result, status = AuthService.logout(token)
         return result, status
 
 @api.route("/logout-all")
 class LogoutAll(Resource):
-    @api.expect(auth_parser, logout_all_model)  # ✅ Usar parser + body
+    @api.expect(auth_parser, logout_all_model)
     @api.response(200, "Todas las sesiones cerradas")
     @api.response(400, "Error en los datos")
     def post(self):
         """Cerrar todas las sesiones de un usuario (para admin)"""
-        args = auth_parser.parse_args()
-        auth_header = args.get('Authorization')
-        
-        if not auth_header.startswith('Bearer '):
-            return {"error": "Formato de token inválido. Use: Bearer <token>"}, 401
-            
-        # Verificar que el usuario sea admin
-        token = auth_header.replace('Bearer ', '')
-        try:
-            payload = jwt.decode(token, Config.SECRET_KEY, algorithms=["HS256"])
-            if payload.get('rol') != 'admin':
-                return {"error": "Solo los administradores pueden usar este endpoint"}, 403
-        except:
-            return {"error": "Token inválido"}, 401
-        
+        token, error, status = extract_token()
+        if error:
+            return error, status
+        payload, error, status = decode_token(token)
+        if error:
+            return error, status
+        if payload.get('rol') != 'admin':
+            return {"error": ERR_ADMIN_ONLY}, 403
+
         data = api.payload
         user_id = data.get('user_id')
         if not user_id:
-            return {"error": "user_id es requerido"}, 400
-            
+            return {"error": ERR_USER_ID_REQUIRED}, 400
+
         result, status = AuthService.logout_all(user_id)
         return result, status
 
@@ -139,30 +164,17 @@ class UserSessions(Resource):
     @api.response(401, "No autorizado")
     def get(self):
         """Obtener sesiones activas del usuario actual"""
-        args = auth_parser.parse_args()
-        auth_header = args.get('Authorization', '')
-        
-        if not auth_header.startswith('Bearer '):
-            auth_header = request.headers.get('Authorization', '')
-            if not auth_header.startswith('Bearer '):
-                return {"error": "Token de autorización requerido"}, 401
-            
-        token = auth_header.replace('Bearer ', '')
-        
-        try:
-            payload = jwt.decode(token, Config.SECRET_KEY, algorithms=["HS256"])
-            user_id = payload.get('user_id')
-            
-            if not user_id:
-                return {"error": "Token inválido"}, 401
-                
-            result, status = AuthService.get_active_sessions(user_id)
-            return result, status
-            
-        except jwt.ExpiredSignatureError:
-            return {"error": "Token expirado"}, 401
-        except jwt.InvalidTokenError:
-            return {"error": "Token inválido"}, 401
+        token, error, status = extract_token()
+        if error:
+            return error, status
+        payload, error, status = decode_token(token)
+        if error:
+            return error, status
+        user_id = payload.get('user_id')
+        if not user_id:
+            return {"error": ERR_TOKEN_INVALID}, 401
+        result, status = AuthService.get_active_sessions(user_id)
+        return result, status
 
 @api.route("/verify-session")
 class VerifySession(Resource):
@@ -171,19 +183,11 @@ class VerifySession(Resource):
     @api.response(401, "Sesión inválida")
     def get(self):
         """Verificar si la sesión actual es válida"""
-        args = auth_parser.parse_args()
-        auth_header = args.get('Authorization')
-        
-        if not auth_header.startswith('Bearer '):
-            return {"error": "Formato de token inválido. Use: Bearer <token>"}, 401
-            
-        token = auth_header.replace('Bearer ', '')
-        
+        token, error, status = extract_token()
+        if error:
+            return error, status
         is_valid, message = AuthService.verify_session(token)
-        if is_valid:
-            return {"valid": True, "message": message}, 200
-        else:
-            return {"valid": False, "message": message}, 401
+        return ({"valid": True, "message": message}, 200) if is_valid else ({"valid": False, "message": message}, 401)
 
 @api.route("/refresh-session")
 class RefreshSession(Resource):
@@ -192,13 +196,9 @@ class RefreshSession(Resource):
     @api.response(400, "No se pudo renovar")
     def post(self):
         """Renovar la sesión actual"""
-        args = auth_parser.parse_args()
-        auth_header = args.get('Authorization')
-        
-        if not auth_header.startswith('Bearer '):
-            return {"error": "Formato de token inválido. Use: Bearer <token>"}, 401
-            
-        token = auth_header.replace('Bearer ', '')
+        token, error, status = extract_token()
+        if error:
+            return error, status
         result, status = AuthService.refresh_session(token)
         return result, status
 
@@ -207,7 +207,6 @@ class ClientInfo(Resource):
     def get(self):
         """Obtener información del cliente (sin necesidad de token)"""
         client_info = AuthService.get_client_info()
-        
         return {
             "client_info": client_info,
             "instructions": {
@@ -217,7 +216,7 @@ class ClientInfo(Resource):
                 "step_3": "POST /auth/login - Para iniciar sesión nuevamente"
             }
         }, 200
-        
+
 @api.route("/verify-2fa")
 class Verify2FA(Resource):
     @api.expect(verify_2fa_model)
