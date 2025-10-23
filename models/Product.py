@@ -2,17 +2,17 @@ import psycopg2
 from config import Config
 
 class Product:
-    def __init__(self, Product_ID=None, Code=None, Name=None, Description=None,
-                 Category=None, Unit=None, Minimum_Stock=0, Current_Stock=0, Price=0.0):
-        self.Product_ID = Product_ID
-        self.Code = Code
-        self.Name = Name
-        self.Description = Description
-        self.Category = Category
-        self.Unit = Unit
-        self.Minimum_Stock = Minimum_Stock
-        self.Current_Stock = Current_Stock
-        self.Price = Price
+    def __init__(self, product_id=None, code=None, name=None, description=None,
+                 category=None, unit=None, minimum_stock=0, current_stock=0, price=0.0):
+        self.product_id = product_id
+        self.code = code
+        self.name = name
+        self.description = description
+        self.category = category
+        self.unit = unit
+        self.minimum_stock = minimum_stock
+        self.current_stock = current_stock
+        self.price = price
 
     # ---------- CRUD BÁSICO ----------
 
@@ -55,12 +55,12 @@ class Product:
             INSERT INTO Products (Code, Name, Description, Category, Unit, Minimum_Stock, Current_Stock, Price)
             VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
             RETURNING Product_ID
-        """, (self.Code, self.Name, self.Description, self.Category, self.Unit,
-              self.Minimum_Stock, self.Current_Stock, self.Price))
-        self.Product_ID = cur.fetchone()[0]
+        """, (self.code, self.name, self.description, self.category, self.unit,
+              self.minimum_stock, self.current_stock, self.price))
+        self.product_id = cur.fetchone()[0]
         conn.commit()
         conn.close()
-        return self.Product_ID
+        return self.product_id
 
     def update(self):
         """Actualiza producto existente"""
@@ -69,13 +69,13 @@ class Product:
         cur.execute("""
             UPDATE Products
             SET Code=%s, Name=%s, Description=%s, Category=%s, Unit=%s,
-                Minimum_Stock=%s, Current_Stock=%s, Price=%s
-            WHERE Product_ID=%s
-        """, (self.Code, self.Name, self.Description, self.Category, self.Unit,
-              self.Minimum_Stock, self.Current_Stock, self.Price, self.Product_ID))
+                minimum_stock=%s, current_stock=%s, price=%s
+            WHERE product_id=%s
+        """, (self.code, self.name, self.description, self.category, self.unit,
+              self.minimum_stock, self.current_stock, self.price, self.product_id))
         conn.commit()
         conn.close()
-        return self.Product_ID
+        return self.product_id
 
     @staticmethod
     def delete(product_id):
