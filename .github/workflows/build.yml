@@ -5,15 +5,43 @@ on:
       - main
   pull_request:
     types: [opened, synchronize, reopened]
+
 jobs:
   sonarqube:
     name: SonarQube
     runs-on: windows-latest
+
     steps:
+      # 1️⃣ Clona el código
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Shallow clones should be disabled for a better relevancy of analysis
+          fetch-depth: 0  # Evita shallow clone para mejorar la precisión del análisis
+
+      # 2️⃣ Instala Python
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+
+      # 3️⃣ Instala dependencias
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pytest pytest-cov python-dotenv
+
+      # 4️⃣ Ejecuta los tests y genera reporte coverage.xml
+      - name: Run tests with coverage
+        run: |
+          python -m pytest --cov=. --cov-report=xml
+
+      # 5️⃣ Ejecuta el análisis SonarQube Cloud
       - name: SonarQube Scan
         uses: SonarSource/sonarqube-scan-action@v6
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        with:
+          args: >
+            -Dsonar.projectKey=PWS-PROJECT
+            -Dsonar.sources=.
+            -Dsonar.python.coverage.reportPaths=coverage.xml
