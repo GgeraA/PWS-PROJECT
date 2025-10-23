@@ -3,11 +3,11 @@ import psycopg2
 from config import Config
 
 class Sale:
-    def __init__(self, Sale_ID=None, Date=None, User_ID=None, Total=0):
-        self.Sale_ID = Sale_ID
-        self.Date = Date
-        self.User_ID = User_ID
-        self.Total = Total
+    def __init__(self, sale_id=None, date=None, user_id=None, total=0):
+        self.sale_id = sale_id
+        self.date = date
+        self.user_id = user_id
+        self.total = total
 
     # Obtener todas las ventas
     @staticmethod
@@ -35,10 +35,10 @@ class Sale:
         cur = conn.cursor()
         cur.execute(
             "INSERT INTO Sales (User_ID, Total) VALUES (%s, %s) RETURNING Sale_ID, Date",
-            (self.User_ID, self.Total)
+            (self.user_id, self.total)
         )
         row = cur.fetchone()
-        self.Sale_ID, self.Date = row
+        self.sale_id, self.date = row
         conn.commit()
         conn.close()
         return self
@@ -49,7 +49,7 @@ class Sale:
         cur = conn.cursor()
         cur.execute(
             "UPDATE Sales SET User_ID = %s, Total = %s WHERE Sale_ID = %s RETURNING Sale_ID",
-            (data.get("User_ID", self.User_ID), data.get("Total", self.Total), self.Sale_ID)
+            (data.get("User_ID", self.user_id), data.get("Total", self.total), self.sale_id)
         )
         row = cur.fetchone()
         conn.commit()

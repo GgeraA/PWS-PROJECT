@@ -3,13 +3,13 @@ import psycopg2
 from config import Config
 
 class SaleDetail:
-    def __init__(self, Detail_ID=None, Sale_ID=None, Product_ID=None, Quantity=0, Price=0, Subtotal=0):
-        self.Detail_ID = Detail_ID
-        self.Sale_ID = Sale_ID
-        self.Product_ID = Product_ID
-        self.Quantity = Quantity
-        self.Price = Price
-        self.Subtotal = Subtotal
+    def __init__(self, detail_id=None, sale_id=None, product_id=None, quantity=0, price=0, subtotal=0):
+        self.detail_id = detail_id
+        self.sale_id = sale_id
+        self.product_id = product_id
+        self.quantity = quantity
+        self.price = price
+        self.subtotal = subtotal
 
     # Obtener todos los detalles
     @staticmethod
@@ -39,12 +39,12 @@ class SaleDetail:
             """
             INSERT INTO Sale_Details (Sale_ID, Product_ID, Quantity, Price) 
             VALUES (%s, %s, %s, %s) 
-            RETURNING Detail_ID, Subtotal
+            RETURNING detail_id, subtotal
             """,
-            (self.Sale_ID, self.Product_ID, self.Quantity, self.Price)
+            (self.sale_id, self.product_id, self.quantity, self.price)
         )
         row = cur.fetchone()
-        self.Detail_ID, self.Subtotal = row
+        self.detail_id, self.subtotal = row
         conn.commit()
         conn.close()
         return self
@@ -60,11 +60,11 @@ class SaleDetail:
             WHERE Detail_ID = %s RETURNING Detail_ID
             """,
             (
-                data.get("Sale_ID", self.Sale_ID),
-                data.get("Product_ID", self.Product_ID),
-                data.get("Quantity", self.Quantity),
-                data.get("Price", self.Price),
-                self.Detail_ID
+                data.get("sale_id", self.sale_id),
+                data.get("product_id", self.product_id),
+                data.get("quantity", self.quantity),
+                data.get("price", self.price),
+                self.detail_id
             )
         )
         row = cur.fetchone()

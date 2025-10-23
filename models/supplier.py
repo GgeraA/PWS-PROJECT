@@ -3,11 +3,11 @@ import psycopg2
 from config import Config
 
 class Supplier:
-    def __init__(self, Supplier_ID=None, Name=None, Phone=None, Contact=None):
-        self.Supplier_ID = Supplier_ID
-        self.Name = Name
-        self.Phone = Phone
-        self.Contact = Contact
+    def __init__(self, supplier_id=None, name=None, phone=None, contact=None):
+        self.supplier_id = supplier_id
+        self.name = name
+        self.phone = phone
+        self.contact = contact
 
     @staticmethod
     def from_row(row):
