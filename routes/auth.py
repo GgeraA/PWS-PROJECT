@@ -4,6 +4,7 @@ from services.auth_service import AuthService
 import jwt
 from config import Config
 
+correoMensajes = "Correo electrónico"
 api = Namespace("auth", description="Endpoints de autenticación")
 
 # ------------------ Constantes ------------------
