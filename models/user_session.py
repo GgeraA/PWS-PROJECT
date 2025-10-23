@@ -1,6 +1,6 @@
 import psycopg2
 from config import Config
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import json
 
 class UserSession:
@@ -127,7 +127,7 @@ class UserSession:
         """Renovar una sesión extendiendo su tiempo de expiración"""
         conn = psycopg2.connect(**Config.DATABASE)
         cur = conn.cursor()
-        new_expires_at = datetime.utcnow() + timedelta(hours=extension_hours)
+        new_expires_at = datetime.now(tz=timezone.utc) + timedelta(hours=extension_hours)
         cur.execute("""
             UPDATE user_sessions 
             SET expires_at=%s, last_activity=NOW()
@@ -168,6 +168,7 @@ class UserSession:
                 location_info = json.loads(session.location_data)
             except:
                 location_info = {"error": "Could not parse location data"}
+                raise
         
         return {
             "session_id": session.id,
