@@ -7,22 +7,24 @@ from config import Config
 
 def send_email(to_email, subject, body):
     """
-    Envía un correo electrónico usando SMTP.
+    Envía un correo electrónico usando SMTP seguro (TLS/SSL).
     Retorna dict con resultado y latencia.
     """
     start = time.time()
     try:
-        # Construcción del mensaje
         message = MIMEMultipart()
         message["From"] = Config.MAIL_USERNAME
         message["To"] = to_email
         message["Subject"] = subject
         message.attach(MIMEText(body, "plain"))
 
-        # Conexión segura con SMTP
-        context = ssl.create_default_context()
-        with smtplib.SMTP(Config.MAIL_SERVER, Config.MAIL_PORT) as server:
-            server.starttls(context=context)
+        # Crear contexto seguro con TLS 1.2 o superior
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        context.minimum_version = ssl.TLSVersion.TLSv1_2
+        context.check_hostname = True
+        context.verify_mode = ssl.CERT_REQUIRED
+
+        with smtplib.SMTP_SSL(Config.MAIL_SERVER, Config.MAIL_PORT, context=context) as server:
             server.login(Config.MAIL_USERNAME, Config.MAIL_PASSWORD)
             server.sendmail(Config.MAIL_USERNAME, to_email, message.as_string())
 
