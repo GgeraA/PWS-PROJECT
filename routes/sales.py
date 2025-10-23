@@ -2,6 +2,8 @@
 from flask_restx import Namespace, Resource, fields
 from services.sale_service import create_sale, get_all_sales, get_sale, update_sale, delete_sale
 
+
+SALE_NOT_FOUND = "Sale not found"
 api = Namespace("sales", description="Sales operations")
 
 sale_model = api.model("Sale", {
@@ -26,14 +28,14 @@ class SalesList(Resource):
 
 
 @api.route("/<int:sale_id>")
-@api.response(404, "Sale not found")
+@api.response(404, SALE_NOT_FOUND)
 class SaleResource(Resource):
     @api.marshal_with(sale_model,mask=False)
     def get(self, sale_id):
         """Obtener una venta por ID"""
         sale = get_sale(sale_id)
         if not sale:
-            api.abort(404, "Sale not found")
+            api.abort(404, )
         return sale
 
     @api.expect(sale_model)
@@ -41,12 +43,12 @@ class SaleResource(Resource):
         """Actualizar una venta existente"""
         sale = update_sale(sale_id, api.payload)
         if not sale:
-            api.abort(404, "Sale not found")
+            api.abort(404, SALE_NOT_FOUND)
         return {"message": "Sale updated"}
 
     def delete(self, sale_id):
         """Eliminar una venta"""
         success = delete_sale(sale_id)
         if not success:
-            api.abort(404, "Sale not found")
+            api.abort(404, SALE_NOT_FOUND)
         return {"message": "Sale deleted"}

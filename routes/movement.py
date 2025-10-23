@@ -6,6 +6,7 @@ from services.movement_service import (
     update_movement, delete_movement
 )
 
+MOVEMENT_DESC = "Movimiento no encontrado"
 api = Namespace("movements", description="Movements operations")
 
 # Swagger model
@@ -36,14 +37,14 @@ class MovementList(Resource):
 
 
 @api.route("/<int:movement_id>")
-@api.response(404, "Movimiento no encontrado")
+@api.response(404, MOVEMENT_DESC)
 class MovementResource(Resource):
     @api.marshal_with(movement_model,mask=False)
     def get(self, movement_id):
         """Obtener un movimiento por ID"""
         movement = get_movement(movement_id)
         if not movement:
-            api.abort(404, "Movimiento no encontrado")
+            api.abort(404, MOVEMENT_DESC)
         return movement
 
     @api.expect(movement_model, validate=True)
@@ -52,12 +53,12 @@ class MovementResource(Resource):
         data = request.json
         movement = update_movement(movement_id, data)
         if not movement:
-            api.abort(404, "Movimiento no encontrado")
+            api.abort(404, MOVEMENT_DESC)
         return {"message": "Movimiento actualizado"}
 
     def delete(self, movement_id):
         """Eliminar un movimiento"""
         success = delete_movement(movement_id)
         if not success:
-            api.abort(404, "Movimiento no encontrado")
+            api.abort(404, MOVEMENT_DESC)
         return {"message": "Movimiento eliminado"}
