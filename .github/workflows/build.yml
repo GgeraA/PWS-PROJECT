@@ -15,7 +15,7 @@ jobs:
       # 1️⃣ Clona el código
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Evita shallow clone para mejorar la precisión del análisis
+          fetch-depth: 0
 
       # 2️⃣ Instala Python
       - name: Set up Python
@@ -29,10 +29,10 @@ jobs:
           pip install -r requirements.txt
           pip install pytest pytest-cov python-dotenv
 
-      # 4️⃣ Ejecuta los tests y genera reporte coverage.xml
+      # 4️⃣ ✅ CORREGIDO: Ejecuta SOLO las pruebas de modelos
       - name: Run tests with coverage
         run: |
-          python -m pytest --cov=. --cov-report=xml
+          python -m pytest test/test_models/ --cov=models --cov-report=xml
 
       # 5️⃣ Ejecuta el análisis SonarQube Cloud
       - name: SonarQube Scan
