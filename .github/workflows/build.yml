@@ -1,50 +1,45 @@
-name: Build
+name: SonarQube Cloud Analysis
 on:
   push:
-    branches:
-      - main
+    branches: [ main ]
   pull_request:
-    types: [opened, synchronize, reopened]
+    branches: [ main ]
 
 jobs:
-  sonarqube:
-    name: SonarQube
-    runs-on: windows-latest
-
+  analyze:
+    name: Analyze with SonarQube
+    runs-on: ubuntu-latest
+    
     steps:
-      # 1️⃣ Clona el código
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      # 2️⃣ Instala Python
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.13'
-
-      # 3️⃣ Instala dependencias
-      - name: Install dependencies
-        run: |
-          pip install -r requirements.txt
-          pip install pytest pytest-cov python-dotenv
-
-      # 4️⃣ ✅ CORREGIDO: Ejecuta SOLO las pruebas de modelos
-      - name: Run tests with coverage
-        run: |
-          python -m pytest test/test_models/ --cov=models --cov-report=xml
-
-      # 5️⃣ Ejecuta el análisis SonarQube Cloud
-      - name: SonarQube Scan
-        uses: SonarSource/sonarqube-scan-action@v6
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_HOST_URL: https://sonarcloud.io
-        with:
-          args: >
-            -Dsonar.projectKey=PWS-PROJECT
-            -Dsonar.sources=models
-            -Dsonar.tests=test
-            -Dsonar.python.coverage.reportPaths=coverage.xml
-            -Dsonar.exclusions=services/**,templates/**,static/**,config.py,app.py
-            -Dsonar.inclusions=models/Product.py,models/movement.py
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pytest pytest-cov psycopg2-binary
+        
+    - name: Run tests with coverage
+      run: |
+        python -m pytest test/test_models/ --cov=models --cov-report=xml --quiet
+        echo "✅ Coverage report generated"
+        
+    - name: SonarQube Scan
+      uses: SonarSource/sonarqube-scan-action@v4
+      env:
+        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      with:
+        args: >
+          -Dsonar.organization=ggeraa
+          -Dsonar.projectKey=GgeraA_PWS-PROJECT
+          -Dsonar.python.coverage.reportPaths=coverage.xml
+          -Dsonar.sources=models
+          -Dsonar.tests=test
+          -Dsonar.exclusions=services/**,templates/**,static/**,config.py,app.py
