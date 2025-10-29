@@ -43,6 +43,8 @@ jobs:
         with:
           args: >
             -Dsonar.projectKey=PWS-PROJECT
-            -Dsonar.sources=.
+            -Dsonar.sources=models
+            -Dsonar.tests=test
             -Dsonar.python.coverage.reportPaths=coverage.xml
-            -Dsonar.coverage.exclusions=**/test_*,**/__pycache__/**,**/*.pyc
+            -Dsonar.exclusions=services/**,templates/**,static/**,config.py,app.py
+            -Dsonar.inclusions=models/Product.py,models/movement.py
