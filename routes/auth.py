@@ -35,16 +35,12 @@ auth_parser.add_argument('Authorization', location='headers', required=True,
 login_model = api.model("Login", {
     "email": fields.String(required=True, description=EMAIL_DESC),
     "password": fields.String(required=True, description=PASSWORD_DESC)
-    "email": fields.String(required=True, description=EMAIL_DESC),
-    "password": fields.String(required=True, description="Contraseña")
 })
 
 register_model = api.model("Register", {
     "nombre": fields.String(required=True, description="Nombre completo"),
     "email": fields.String(required=True, description=EMAIL_DESC),
     "password": fields.String(required=True, description=PASSWORD_DESC),
-    "email": fields.String(required=True, description=EMAIL_DESC),
-    "password": fields.String(required=True, description="Contraseña"),
     "rol": fields.String(description="Rol del usuario", default="usuario", enum=['admin', 'usuario', 'visitante'])
 })
 
@@ -54,17 +50,14 @@ logout_all_model = api.model("LogoutAll", {
 
 verify_2fa_model = api.model("Verify2FA", {
     "email": fields.String(required=True, description=EMAIL_DESC),
-    "email": fields.String(required=True, description=EMAIL_DESC),
     "code": fields.String(required=True, description="Código 2FA")
 })
 
 recover_user_model = api.model("RecoverUser", {
     "email": fields.String(required=True, description=EMAIL_DESC)
-    "email": fields.String(required=True, description=EMAIL_DESC)
 })
 
 recover_password_model = api.model("RecoverPassword", {
-    "email": fields.String(required=True, description=EMAIL_DESC)
     "email": fields.String(required=True, description=EMAIL_DESC)
 })
 
