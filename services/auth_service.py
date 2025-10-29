@@ -110,7 +110,7 @@ def register(nombre, email, password, rol="usuario"):
 
     @staticmethod
     def _check_active_sessions(user_id):
-    active_sessions = UserSession.find_active_by_user(user_id)
+        active_sessions = UserSession.find_active_by_user(user_id)
     if not active_sessions or AuthService.ALLOW_MULTIPLE_SESSIONS:
         return None
 
@@ -141,7 +141,7 @@ def register(nombre, email, password, rol="usuario"):
 
     @staticmethod
     def _create_session(user, client_info):
-    ip_address = client_info.get('ip_address')
+     ip_address = client_info.get('ip_address')
     user_agent = client_info.get('user_agent', '')[:500]
     location_data = client_info.get('location_data', {})
     location_str = json.dumps(location_data if location_data else {"error": "No location data"})
@@ -171,7 +171,7 @@ def register(nombre, email, password, rol="usuario"):
 
     @staticmethod
     def login(email, password, client_info=None):
-    start = time.time()
+        start = time.time()
     try:
         # Verificar credenciales
         user = User.find_by_email(email)
@@ -492,7 +492,7 @@ def register(nombre, email, password, rol="usuario"):
 
     @staticmethod
     def validate_password_strength(password):
-    """Validar fortaleza de la contraseña"""
+     """Validar fortaleza de la contraseña"""
     if len(password) < 8:
         return False, "La contraseña debe tener al menos 8 caracteres"
         
