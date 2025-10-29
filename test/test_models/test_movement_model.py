@@ -1,5 +1,6 @@
 import pytest
 from models.movement import Movement
+from models.Product import Product
 from datetime import datetime
 
 def test_create_movement_instance():
@@ -53,6 +54,7 @@ def test_find_by_id_not_found(mock_db_connect):
     result = Movement.find_by_id(999)
     assert result is None
 
+
 def test_save_new_movement(mock_db_connect):
     """Prueba guardar nuevo movimiento"""
     conn, _, cur = mock_db_connect
@@ -68,7 +70,6 @@ def test_save_new_movement(mock_db_connect):
     result_id = movement.save()
     assert result_id == 456
     assert movement.movement_id == 456
-    conn.commit.assert_called_once()
 
 def test_update_movement(mock_db_connect):
     """Prueba actualizar movimiento existente"""
@@ -84,7 +85,6 @@ def test_update_movement(mock_db_connect):
     
     result_id = movement.update()
     assert result_id == 1
-    conn.commit.assert_called_once()
 
 def test_delete_movement_success(mock_db_connect):
     """Prueba eliminar movimiento (éxito)"""

@@ -21,7 +21,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.14'
+          python-version: '3.13'
 
       # 3️⃣ Instala dependencias
       - name: Install dependencies
@@ -45,3 +45,4 @@ jobs:
             -Dsonar.projectKey=PWS-PROJECT
             -Dsonar.sources=.
             -Dsonar.python.coverage.reportPaths=coverage.xml
+            -Dsonar.coverage.exclusions=**/test_*,**/__pycache__/**,**/*.pyc

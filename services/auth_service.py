@@ -106,9 +106,10 @@ def register(nombre, email, password, rol="usuario"):
     except Exception as e:
         log_event("REGISTER", email, "ERROR", str(e))
         return {"error": "Error interno del servidor"}, 500
+        
 
-@staticmethod
-def _check_active_sessions(user_id):
+    @staticmethod
+    def _check_active_sessions(user_id):
     active_sessions = UserSession.find_active_by_user(user_id)
     if not active_sessions or AuthService.ALLOW_MULTIPLE_SESSIONS:
         return None
@@ -138,8 +139,8 @@ def _check_active_sessions(user_id):
         "session_count": len(active_sessions)
     }, 409
 
-@staticmethod
-def _create_session(user, client_info):
+    @staticmethod
+    def _create_session(user, client_info):
     ip_address = client_info.get('ip_address')
     user_agent = client_info.get('user_agent', '')[:500]
     location_data = client_info.get('location_data', {})
@@ -168,8 +169,8 @@ def _create_session(user, client_info):
     session.save()
     return token, expires_at, ip_address, location_data
 
-@staticmethod
-def login(email, password, client_info=None):
+    @staticmethod
+    def login(email, password, client_info=None):
     start = time.time()
     try:
         # Verificar credenciales
@@ -224,8 +225,8 @@ def login(email, password, client_info=None):
         log_event("LOGIN", email, "ERROR", str(e))
         return {"error": "Error interno del servidor"}, 500
 
-@staticmethod
-def verify_session(token):
+    @staticmethod
+    def verify_session(token):
         """Verificar si una sesión es válida y activa"""
         try:
             session = UserSession.find_by_token(token)
@@ -241,8 +242,8 @@ def verify_session(token):
         except Exception as e:
             return False, f"Error verificando sesión: {str(e)}"
 
-@staticmethod
-def refresh_session(token):
+    @staticmethod
+    def refresh_session(token):
         """Renovar una sesión existente"""
         try:
             success = UserSession.refresh_session(token, AuthService.SESSION_DURATION_HOURS)
@@ -253,8 +254,8 @@ def refresh_session(token):
         except Exception as e:
             return {"error": f"Error renovando sesión: {str(e)}"}, 500
 
-@staticmethod
-def logout(session_token):
+    @staticmethod
+    def logout(session_token):
         try:
             success = UserSession.invalidate_session(session_token)
             if not success:
@@ -266,8 +267,8 @@ def logout(session_token):
             log_event("LOGOUT", "SYSTEM", "ERROR", str(e))
             return {"error": str(e)}, 500
 
-@staticmethod
-def logout_all(user_id):
+    @staticmethod
+    def logout_all(user_id):
         """Cerrar todas las sesiones de un usuario"""
         try:
             UserSession.invalidate_all_user_sessions(user_id)
@@ -277,8 +278,8 @@ def logout_all(user_id):
             log_event("LOGOUT_ALL", "SYSTEM", "ERROR", str(e))
             return {"error": str(e)}, 500
 
-@staticmethod
-def get_active_sessions(user_id):
+    @staticmethod
+    def get_active_sessions(user_id):
         """Obtener todas las sesiones activas de un usuario"""
         try:
             sessions = UserSession.find_active_by_user(user_id)
@@ -308,10 +309,8 @@ def get_active_sessions(user_id):
         except Exception as e:
             return {"error": str(e)}, 500
 
-    # === NUEVOS MÉTODOS PARA DESARROLLO ===
-
-@staticmethod
-def force_logout_all_sessions():
+    @staticmethod
+    def force_logout_all_sessions():
         """Forzar cierre de todas las sesiones (útil para desarrollo)"""
         try:
             conn = psycopg2.connect(**Config.DATABASE)
@@ -332,8 +331,8 @@ def force_logout_all_sessions():
             log_event("FORCE_LOGOUT_ALL", "SYSTEM", "ERROR", str(e))
             return 0
 
-@staticmethod
-def get_all_active_sessions():
+    @staticmethod
+    def get_all_active_sessions():
         """Obtener todas las sesiones activas en el sistema"""
         try:
             conn = psycopg2.connect(**Config.DATABASE)
@@ -369,8 +368,8 @@ def get_all_active_sessions():
             log_event("GET_ALL_SESSIONS", "SYSTEM", "ERROR", str(e))
             return []
 
-@staticmethod
-def get_current_session_info(token):
+    @staticmethod
+    def get_current_session_info(token):
         """Obtener información de la sesión actual"""
         try:
             session = UserSession.find_by_token(token)
@@ -403,17 +402,15 @@ def get_current_session_info(token):
         except Exception as e:
             return None, f"Error: {str(e)}"
 
-    # === MÉTODOS EXISTENTES ===
-
-@staticmethod
-def verify_2fa(email, code):
+    @staticmethod
+    def verify_2fa(email, code):
         if code == "123456":  # Simulación
             return {"success": True, "message": "2FA verificado"}, 200
         else:
             return {"error": "Código 2FA inválido"}, 401
 
-@staticmethod
-def recover_user(email):
+    @staticmethod
+    def recover_user(email):
         try:
             user = User.find_by_email(email)
             if not user:
@@ -429,8 +426,8 @@ def recover_user(email):
             log_event("RECOVER_USER", email, "ERROR", str(e))
             return {"error": str(e)}, 500
 
-@staticmethod
-def recover_password(email):
+    @staticmethod
+    def recover_password(email):
         try:
             user = User.find_by_email(email)
             if not user:
@@ -459,20 +456,20 @@ def recover_password(email):
         except Exception as e:
             return {"error": str(e)}, 500
 
-@staticmethod
-def reset_password(token, new_password):
+    @staticmethod
+    def reset_password(token, new_password):
         # Implementar lógica de reset de contraseña
         return {"message": "Funcionalidad en desarrollo"}, 200
 
 # ----------------------------- Validaciones de Usuario y correo ------------------------------
-@staticmethod
-def validate_email_format(email):
+    @staticmethod
+    def validate_email_format(email):
         """Validar formato de email básico con regex"""
         pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
         return re.match(pattern, email) is not None
 
-@staticmethod
-def validate_email_domain(email):
+    @staticmethod
+    def validate_email_domain(email):
         """Validar dominio del email (verificar que el dominio existe)"""
         try:
             domain = email.split('@')[1]
@@ -483,8 +480,8 @@ def validate_email_domain(email):
             return False
             raise
 
-@staticmethod
-def validate_email_comprehensive(email):
+    @staticmethod
+    def validate_email_comprehensive(email):
         """Validación completa de email usando email-validator"""
         try:
             # Validar email con la librería email-validator
@@ -493,8 +490,8 @@ def validate_email_comprehensive(email):
         except EmailNotValidError as e:
             return False, str(e)
 
-@staticmethod
-def validate_password_strength(password):
+    @staticmethod
+    def validate_password_strength(password):
     """Validar fortaleza de la contraseña"""
     if len(password) < 8:
         return False, "La contraseña debe tener al menos 8 caracteres"
@@ -521,8 +518,8 @@ def validate_password_strength(password):
         
     return True, "Contraseña válida" 
 
-@staticmethod
-def validate_password_common(password):
+    @staticmethod
+    def validate_password_common(password):
         """Verificar que la contraseña no sea común"""
         common_passwords = [
             'password', '12345678', '123456789', 'qwerty', 'abc123', 
@@ -534,8 +531,8 @@ def validate_password_common(password):
         
         return True, "Contraseña aceptable"
 
-@staticmethod
-def validate_user_data(nombre, email, password):
+    @staticmethod
+    def validate_user_data(nombre, email, password):
         """Validación completa de datos de usuario"""
         errors = []
         
@@ -568,10 +565,3 @@ def validate_user_data(nombre, email, password):
                 errors.append(common_error)
         
         return len(errors) == 0, errors
-
-@staticmethod
-def verify_2fa(email, code):
-    if code == "123456":  # Simulación
-        return {"success": True, "message": "2FA verificado"}, 200
-    else:
-        return {"error": "Código 2FA inválido"}, 401
