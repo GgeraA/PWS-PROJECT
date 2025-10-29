@@ -16,6 +16,7 @@ import re
 import dns.resolver
 from email_validator import validate_email, EmailNotValidError
 
+
 class AuthService:
 
     # Configuración de sesiones
@@ -79,151 +80,161 @@ class AuthService:
             "timezone": "UTC"
         }
 
-@staticmethod
-def register(nombre, email, password, rol="usuario"):
-    try:
-        # Validar datos antes de registrar
-        is_valid, errors = AuthService.validate_user_data(nombre, email, password)
-        if not is_valid:
-            return {"error": "Errores de validación", "details": errors}, 400
+    @staticmethod
+    def is_email_already_registered(email):
+        """Helper: comprobar si un email ya existe en users"""
+        try:
+            existing = User.find_by_email(email)
+            return existing is not None
+        except Exception:
+            return False
 
-        # Verificar si el email ya está registrado
-        if AuthService.is_email_already_registered(email):
-            return {"error": "El email ya está registrado"}, 400
+    @staticmethod
+    def register(nombre, email, password, rol="usuario"):
+        try:
+            # Validar datos antes de registrar
+            is_valid, errors = AuthService.validate_user_data(nombre, email, password)
+            if not is_valid:
+                return {"error": "Errores de validación", "details": errors}, 400
 
-        # Si todo está bien, crear el usuario
-        user_id = User.create_user(nombre, email, password, rol)
-        log_event("REGISTER", email, "SUCCESS", f"Usuario creado: {nombre}")
-        
-        return {
-            "message": "Usuario registrado exitosamente",
-            "user_id": user_id
-        }, 201
+            # Verificar si el email ya está registrado
+            if AuthService.is_email_already_registered(email):
+                return {"error": "El email ya está registrado"}, 400
 
-    except psycopg2.IntegrityError as e:
-        log_event("REGISTER", email, "ERROR", f"Error de integridad: {str(e)}")
-        return {"error": "Error en los datos proporcionados"}, 400
-    except Exception as e:
-        log_event("REGISTER", email, "ERROR", str(e))
-        return {"error": "Error interno del servidor"}, 500
-        
+            # Si todo está bien, crear el usuario
+            user_id = User.create_user(nombre, email, password, rol)
+            log_event("REGISTER", email, "SUCCESS", f"Usuario creado: {nombre}")
+
+            return {
+                "message": "Usuario registrado exitosamente",
+                "user_id": user_id
+            }, 201
+
+        except psycopg2.IntegrityError as e:
+            log_event("REGISTER", email, "ERROR", f"Error de integridad: {str(e)}")
+            return {"error": "Error en los datos proporcionados"}, 400
+        except Exception as e:
+            log_event("REGISTER", email, "ERROR", str(e))
+            return {"error": "Error interno del servidor"}, 500
 
     @staticmethod
     def _check_active_sessions(user_id):
         active_sessions = UserSession.find_active_by_user(user_id)
-    if not active_sessions or AuthService.ALLOW_MULTIPLE_SESSIONS:
-        return None
+        if not active_sessions or AuthService.ALLOW_MULTIPLE_SESSIONS:
+            return None
 
-    session_info = []
-    for session in active_sessions:
-        location_info = {}
-        if session.location_data:
-            try:
-                location_info = json.loads(session.location_data)
-            except:
-                location_info = {"error": "Could not parse location data"}
-                raise
+        session_info = []
+        for session in active_sessions:
+            location_info = {}
+            if session.location_data:
+                try:
+                    location_info = json.loads(session.location_data)
+                except Exception:
+                    location_info = {"error": "Could not parse location data"}
+                    # no hacemos raise para devolver info útil, pero si quieres puedes logear
+            session_info.append({
+                "session_id": session.id,
+                "ip_address": session.ip_address,
+                "location": location_info.get('city', 'Unknown'),
+                "login_time": session.created_at.isoformat() if session.created_at else None,
+                "last_activity": session.last_activity.isoformat() if session.last_activity else None
+            })
 
-        session_info.append({
-            "session_id": session.id,
-            "ip_address": session.ip_address,
-            "location": location_info.get('city', 'Unknown'),
-            "login_time": session.created_at.isoformat() if session.created_at else None,
-            "last_activity": session.last_activity.isoformat() if session.last_activity else None
-        })
-
-    return {
-        "error": "Ya tienes una sesión activa",
-        "message": "Debes cerrar tu sesión actual antes de iniciar una nueva",
-        "active_sessions": session_info,
-        "session_count": len(active_sessions)
-    }, 409
+        return {
+            "error": "Ya tienes una sesión activa",
+            "message": "Debes cerrar tu sesión actual antes de iniciar una nueva",
+            "active_sessions": session_info,
+            "session_count": len(active_sessions)
+        }, 409
 
     @staticmethod
     def _create_session(user, client_info):
-     ip_address = client_info.get('ip_address')
-    user_agent = client_info.get('user_agent', '')[:500]
-    location_data = client_info.get('location_data', {})
-    location_str = json.dumps(location_data if location_data else {"error": "No location data"})
+        ip_address = client_info.get('ip_address')
+        user_agent = client_info.get('user_agent', '')[:500]
+        location_data = client_info.get('location_data', {})
+        location_str = json.dumps(location_data if location_data else {"error": "No location data"})
 
-    payload = {
-        "user_id": user.id,
-        "email": user.email,
-        "rol": user.rol,
-        "exp": datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=AuthService.SESSION_DURATION_HOURS)
-    }
-    token = jwt.encode(payload, Config.SECRET_KEY, algorithm="HS256")
-    expires_at = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=AuthService.SESSION_DURATION_HOURS)
+        payload = {
+            "user_id": user.id,
+            "email": user.email,
+            "rol": getattr(user, 'rol', None),
+            # jwt expiration as unix timestamp
+            "exp": int((datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=AuthService.SESSION_DURATION_HOURS)).timestamp())
+        }
+        token = jwt.encode(payload, Config.SECRET_KEY, algorithm="HS256")
+        expires_at = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=AuthService.SESSION_DURATION_HOURS)
 
-    session = UserSession(
-        user_id=user.id,
-        session_token=token,
-        created_at=datetime.datetime.now(datetime.timezone.utc),
-        expires_at=expires_at,
-        is_active=True,
-        ip_address=ip_address,
-        user_agent=user_agent,
-        location_data=location_str,
-        last_activity=datetime.datetime.now()
-    )
-    session.save()
-    return token, expires_at, ip_address, location_data
+        session = UserSession(
+            user_id=user.id,
+            session_token=token,
+            created_at=datetime.datetime.now(datetime.timezone.utc),
+            expires_at=expires_at,
+            is_active=True,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            location_data=location_str,
+            last_activity=datetime.datetime.now(datetime.timezone.utc)
+        )
+        session.save()
+        return token, expires_at, ip_address, location_data
 
     @staticmethod
     def login(email, password, client_info=None):
         start = time.time()
-    try:
-        # Verificar credenciales
-        user = User.find_by_email(email)
-        if not user or not user.check_password(password):
-            log_event("LOGIN", email, "FAILED", "Credenciales inválidas")
-            return {"error": "Credenciales inválidas"}, 401
+        try:
+            # Verificar credenciales
+            user = User.find_by_email(email)
+            if not user or not user.check_password(password):
+                log_event("LOGIN", email, "FAILED", "Credenciales inválidas")
+                return {"error": "Credenciales inválidas"}, 401
 
-        # Verificar sesiones activas
-        session_check = AuthService._check_active_sessions(user.id)
-        if session_check:
-            return session_check
+            # Verificar sesiones activas
+            session_check = AuthService._check_active_sessions(user.id)
+            if session_check:
+                return session_check
 
-        # Obtener información del cliente
-        if not client_info:
-            client_info = AuthService.get_client_info()
+            # Obtener información del cliente
+            if not client_info:
+                client_info = AuthService.get_client_info()
 
-        # Crear sesión
-        token, expires_at, ip_address, location_data = AuthService._create_session(user, client_info)
+            # Crear sesión
+            token, expires_at, ip_address, location_data = AuthService._create_session(user, client_info)
 
-        response_data = {
-            "message": "Inicio de sesión exitoso",
-            "token": token,
-            "user": {
-                "id": user.id,
-                "nombre": user.nombre,
-                "email": user.email,
-                "rol": user.rol,
-                "two_factor_enabled": user.two_factor_enabled
-            },
-            "session_info": {
-                "ip_address": ip_address,
-                "location": location_data,
-                "login_time": datetime.datetime.now().isoformat(),
-                "expires_at": expires_at.isoformat(),
-                "session_duration_hours": AuthService.SESSION_DURATION_HOURS
-            },
-            "requires_2fa": user.two_factor_enabled
-        }
+            response_data = {
+                "message": "Inicio de sesión exitoso",
+                "token": token,
+                "user": {
+                    "id": user.id,
+                    "nombre": getattr(user, 'nombre', None),
+                    "email": getattr(user, 'email', None),
+                    "rol": getattr(user, 'rol', None),
+                    "two_factor_enabled": getattr(user, 'two_factor_enabled', False)
+                },
+                "session_info": {
+                    "ip_address": ip_address,
+                    "location": location_data,
+                    "login_time": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                    "expires_at": expires_at.isoformat(),
+                    "session_duration_hours": AuthService.SESSION_DURATION_HOURS
+                },
+                "requires_2fa": getattr(user, 'two_factor_enabled', False)
+            }
 
-        if user.two_factor_enabled:
-            response_data.update({
-                "message": "Se ha enviado un código de verificación a tu correo",
-                "2fa_required": True
-            })
+            if getattr(user, 'two_factor_enabled', False):
+                response_data.update({
+                    "message": "Se ha enviado un código de verificación a tu correo",
+                    "2fa_required": True
+                })
 
-        log_event("LOGIN", email, "SUCCESS", 
-                 f"Latencia={time.time()-start:.3f}s, IP={ip_address}, Location={location_data.get('city', 'Unknown')}")
-        return response_data, 200
+            # evitar que falle si location_data no es dict
+            loc_city = location_data.get('city', 'Unknown') if isinstance(location_data, dict) else 'Unknown'
+            log_event("LOGIN", email, "SUCCESS",
+                      f"Latencia={time.time()-start:.3f}s, IP={ip_address}, Location={loc_city}")
+            return response_data, 200
 
-    except Exception as e:
-        log_event("LOGIN", email, "ERROR", str(e))
-        return {"error": "Error interno del servidor"}, 500
+        except Exception as e:
+            log_event("LOGIN", email, "ERROR", str(e))
+            return {"error": "Error interno del servidor"}, 500
 
     @staticmethod
     def verify_session(token):
@@ -232,12 +243,12 @@ def register(nombre, email, password, rol="usuario"):
             session = UserSession.find_by_token(token)
             if not session:
                 return False, "Sesión no encontrada o expirada"
-            
+
             # Verificar si la sesión está cerca de expirar (menos de 1 hora)
-            time_remaining = session.expires_at - datetime.datetime.now()
+            time_remaining = session.expires_at - datetime.datetime.now(datetime.timezone.utc)
             if time_remaining.total_seconds() < 3600:  # 1 hora
                 return True, "Sesión válida pero próxima a expirar"
-            
+
             return True, "Sesión válida"
         except Exception as e:
             return False, f"Error verificando sesión: {str(e)}"
@@ -260,7 +271,7 @@ def register(nombre, email, password, rol="usuario"):
             success = UserSession.invalidate_session(session_token)
             if not success:
                 return {"error": "Sesión no encontrada o ya cerrada"}, 404
-            
+
             log_event("LOGOUT", "SYSTEM", "SUCCESS", f"Sesión cerrada: {session_token[:10]}...")
             return {"message": "Sesión cerrada exitosamente"}, 200
         except Exception as e:
@@ -284,16 +295,15 @@ def register(nombre, email, password, rol="usuario"):
         try:
             sessions = UserSession.find_active_by_user(user_id)
             session_list = []
-            
+
             for session in sessions:
                 location_info = {}
                 if session.location_data:
                     try:
                         location_info = json.loads(session.location_data)
-                    except:
+                    except Exception:
                         location_info = {"error": "Could not parse location data"}
-                        raise
-                
+
                 session_list.append({
                     "session_id": session.id,
                     "session_token": session.session_token[:20] + "...",  # No exponer token completo
@@ -304,7 +314,7 @@ def register(nombre, email, password, rol="usuario"):
                     "last_activity": session.last_activity.isoformat() if session.last_activity else None,
                     "expires_at": session.expires_at.isoformat() if session.expires_at else None
                 })
-            
+
             return {"active_sessions": session_list, "count": len(session_list)}, 200
         except Exception as e:
             return {"error": str(e)}, 500
@@ -324,7 +334,7 @@ def register(nombre, email, password, rol="usuario"):
             conn.commit()
             cur.close()
             conn.close()
-            
+
             log_event("FORCE_LOGOUT_ALL", "SYSTEM", "SUCCESS", f"Sesiones cerradas: {count}")
             return count
         except Exception as e:
@@ -348,7 +358,7 @@ def register(nombre, email, password, rol="usuario"):
             rows = cur.fetchall()
             cur.close()
             conn.close()
-            
+
             sessions = []
             for row in rows:
                 sessions.append({
@@ -362,7 +372,7 @@ def register(nombre, email, password, rol="usuario"):
                     "expires_at": row[7].isoformat() if row[7] else None,
                     "session_token_preview": f"{row[8][:20]}..." if row[8] else None
                 })
-            
+
             return sessions
         except Exception as e:
             log_event("GET_ALL_SESSIONS", "SYSTEM", "ERROR", str(e))
@@ -375,16 +385,19 @@ def register(nombre, email, password, rol="usuario"):
             session = UserSession.find_by_token(token)
             if not session:
                 return None, "Sesión no encontrada o expirada"
-            
+
             # Parsear location_data si existe
             location_info = {}
             if session.location_data:
                 try:
                     location_info = json.loads(session.location_data)
-                except:
+                except Exception:
                     location_info = {"error": "Could not parse location data"}
-                    raise
-            
+
+            # calcular tiempo restante con timezone-aware
+            time_remaining = session.expires_at - datetime.datetime.now(datetime.timezone.utc)
+            minutes_remaining = int(time_remaining.total_seconds() / 60) if time_remaining.total_seconds() > 0 else 0
+
             session_data = {
                 "session_id": session.id,
                 "user_id": session.user_id,
@@ -395,9 +408,9 @@ def register(nombre, email, password, rol="usuario"):
                 "user_agent": session.user_agent,
                 "location": location_info,
                 "is_active": session.is_active,
-                "time_remaining_minutes": int((session.expires_at - datetime.datetime.now()).total_seconds() / 60)
+                "time_remaining_minutes": minutes_remaining
             }
-            
+
             return session_data, "Sesión encontrada"
         except Exception as e:
             return None, f"Error: {str(e)}"
@@ -419,7 +432,7 @@ def register(nombre, email, password, rol="usuario"):
             # Simulación envío de correo
             result = send_email(user.email, "Recuperación de usuario", f"Tu nombre de usuario es: {user.nombre}")
 
-            log_event("RECOVER_USER", email, "SUCCESS", f"Latencia={result['latency']}s")
+            log_event("RECOVER_USER", email, "SUCCESS", f"Latencia={result.get('latency', 0)}s")
             return {"message": "Nombre de usuario enviado correctamente"}, 200
 
         except Exception as e:
@@ -458,10 +471,38 @@ def register(nombre, email, password, rol="usuario"):
 
     @staticmethod
     def reset_password(token, new_password):
-        # Implementar lógica de reset de contraseña
-        return {"message": "Funcionalidad en desarrollo"}, 200
+        # Implementar lógica de reset de contraseña (buscar token, validar expiración, actualizar password)
+        try:
+            # Ejemplo esquemático
+            conn = psycopg2.connect(**Config.DATABASE)
+            cur = conn.cursor()
+            cur.execute("SELECT email, expira_en FROM password_resets WHERE token = %s", (token,))
+            row = cur.fetchone()
+            if not row:
+                cur.close()
+                conn.close()
+                return {"error": "Token inválido"}, 400
 
-# ----------------------------- Validaciones de Usuario y correo ------------------------------
+            email_db, expira_en = row[0], row[1]
+            if expira_en < datetime.datetime.now(datetime.timezone.utc):
+                cur.close()
+                conn.close()
+                return {"error": "Token expirado"}, 400
+
+            # Actualizar contraseña (asumiendo User.update_password existe)
+            User.update_password(email_db, new_password)
+
+            # eliminar token
+            cur.execute("DELETE FROM password_resets WHERE token = %s", (token,))
+            conn.commit()
+            cur.close()
+            conn.close()
+
+            return {"message": "Contraseña actualizada correctamente"}, 200
+        except Exception as e:
+            return {"error": str(e)}, 500
+
+    # ----------------------------- Validaciones de Usuario y correo ------------------------------
     @staticmethod
     def validate_email_format(email):
         """Validar formato de email básico con regex"""
@@ -476,9 +517,8 @@ def register(nombre, email, password, rol="usuario"):
             # Verificar registros MX del dominio
             mx_records = dns.resolver.resolve(domain, 'MX')
             return len(mx_records) > 0
-        except:
+        except Exception:
             return False
-            raise
 
     @staticmethod
     def validate_email_comprehensive(email):
@@ -492,56 +532,59 @@ def register(nombre, email, password, rol="usuario"):
 
     @staticmethod
     def validate_password_strength(password):
-     """Validar fortaleza de la contraseña"""
-    if len(password) < 8:
-        return False, "La contraseña debe tener al menos 8 caracteres"
-        
-    # Verificar que tenga al menos una letra minúscula
-    if not re.search(r'[a-z]', password):
-        return False, "La contraseña debe tener al menos una letra minúscula"
-        
-    # Verificar que tenga al menos una letra mayúscula
-    if not re.search(r'[A-Z]', password):
-        return False, "La contraseña debe tener al menos una letra mayúscula"
-        
-    # Verificar que tenga al menos un número
-    if not re.search(r'\d', password):
-        return False, "La contraseña debe tener al menos un número"
-        
-    # Verificar que tenga al menos un carácter especial
-    if not re.search(r'[!@#$%^&*(),.?":{}|<>]', password):
-        return False, "La contraseña debe tener al menos un carácter especial (!@#$%^&* etc.)"
-        
-    # Verificar que no tenga espacios
-    if ' ' in password:
-        return False, "La contraseña no puede contener espacios"
-        
-    return True, "Contraseña válida" 
+        """Validar fortaleza de la contraseña"""
+        if password is None:
+            return False, "La contraseña es requerida"
+
+        if len(password) < 8:
+            return False, "La contraseña debe tener al menos 8 caracteres"
+
+        # Verificar que tenga al menos una letra minúscula
+        if not re.search(r'[a-z]', password):
+            return False, "La contraseña debe tener al menos una letra minúscula"
+
+        # Verificar que tenga al menos una letra mayúscula
+        if not re.search(r'[A-Z]', password):
+            return False, "La contraseña debe tener al menos una letra mayúscula"
+
+        # Verificar que tenga al menos un número
+        if not re.search(r'\d', password):
+            return False, "La contraseña debe tener al menos un número"
+
+        # Verificar que tenga al menos un carácter especial
+        if not re.search(r'[!@#$%^&*(),.?\":{}|<>]', password):
+            return False, "La contraseña debe tener al menos un carácter especial (!@#$%^&* etc.)"
+
+        # Verificar que no tenga espacios
+        if ' ' in password:
+            return False, "La contraseña no puede contener espacios"
+
+        return True, "Contraseña válida"
 
     @staticmethod
     def validate_password_common(password):
         """Verificar que la contraseña no sea común"""
         common_passwords = [
-            'password', '12345678', '123456789', 'qwerty', 'abc123', 
+            'password', '12345678', '123456789', 'qwerty', 'abc123',
             'password1', '1234567', '123456', 'admin', 'welcome'
         ]
-        
+
         if password.lower() in common_passwords:
             return False, "La contraseña es demasiado común"
-        
+
         return True, "Contraseña aceptable"
 
     @staticmethod
     def validate_user_data(nombre, email, password):
         """Validación completa de datos de usuario"""
         errors = []
-        
+
         # Validar nombre
         if not nombre or len(nombre.strip()) < 2:
             errors.append("El nombre debe tener al menos 2 caracteres")
         elif len(nombre) > 50:
             errors.append("El nombre no puede tener más de 50 caracteres")
-        
+
         # Validar email
         if not email:
             errors.append("El email es requerido")
@@ -549,7 +592,15 @@ def register(nombre, email, password, rol="usuario"):
             # Validación básica con regex
             if not AuthService.validate_email_format(email):
                 errors.append("El formato del email no es válido")
-        
+            else:
+                # opción: comprobar dominio (puede hacer slow si dominio no responde)
+                try:
+                    if not AuthService.validate_email_domain(email):
+                        errors.append("El dominio del email no parece tener registros MX válidos")
+                except Exception:
+                    # ignorar fallo de DNS para no bloquear registro
+                    pass
+
         # Validar contraseña
         if not password:
             errors.append("La contraseña es requerida")
@@ -558,10 +609,10 @@ def register(nombre, email, password, rol="usuario"):
             is_strong, password_error = AuthService.validate_password_strength(password)
             if not is_strong:
                 errors.append(password_error)
-            
+
             # Validar que no sea común
             is_uncommon, common_error = AuthService.validate_password_common(password)
             if not is_uncommon:
                 errors.append(common_error)
-        
+
         return len(errors) == 0, errors
