@@ -27,22 +27,23 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
-          pip install pytest pytest-cov python-dotenv
+          pip install pytest pytest-cov python-dotenv psycopg2-binary
 
-      # 4️⃣ ✅ CORREGIDO: Ejecuta SOLO las pruebas de modelos
+      # 4️⃣ Ejecuta SOLO pruebas de modelos
       - name: Run tests with coverage
         run: |
-          python -m pytest test/test_models/ --cov=models --cov-report=xml
+          python -m pytest test/test_models/ --cov=models --cov-report=xml --quiet
 
       # 5️⃣ Ejecuta el análisis SonarQube Cloud
       - name: SonarQube Scan
         uses: SonarSource/sonarqube-scan-action@v6
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+          SONAR_HOST_URL: https://sonarcloud.io  # ✅ AGREGAR ESTO
         with:
           args: >
-            -Dsonar.projectKey=PWS-PROJECT
+            -Dsonar.projectKey=GgeraA_PWS-PROJECT  # ✅ USAR EL KEY CORRECTO
+            -Dsonar.organization=ggeraa  # ✅ AGREGAR ORGANIZACIÓN
             -Dsonar.sources=models
             -Dsonar.tests=test
             -Dsonar.python.coverage.reportPaths=coverage.xml
