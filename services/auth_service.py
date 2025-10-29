@@ -495,31 +495,31 @@ def validate_email_comprehensive(email):
 
 @staticmethod
 def validate_password_strength(password):
-        """Validar fortaleza de la contraseña"""
-        if len(password) < 8:
-            return False, "La contraseña debe tener al menos 8 caracteres"
+    """Validar fortaleza de la contraseña"""
+    if len(password) < 8:
+        return False, "La contraseña debe tener al menos 8 caracteres"
         
-        # Verificar que tenga al menos una letra minúscula
-        if not re.search(r'[a-z]', password):
-            return False, "La contraseña debe tener al menos una letra minúscula"
+    # Verificar que tenga al menos una letra minúscula
+    if not re.search(r'[a-z]', password):
+        return False, "La contraseña debe tener al menos una letra minúscula"
         
-        # Verificar que tenga al menos una letra mayúscula
-        if not re.search(r'[A-Z]', password):
-            return False, "La contraseña debe tener al menos una letra mayúscula"
+    # Verificar que tenga al menos una letra mayúscula
+    if not re.search(r'[A-Z]', password):
+        return False, "La contraseña debe tener al menos una letra mayúscula"
         
-        # Verificar que tenga al menos un número
-        if not re.search(r'\d', password):
-            return False, "La contraseña debe tener al menos un número"
+    # Verificar que tenga al menos un número
+    if not re.search(r'\d', password):
+        return False, "La contraseña debe tener al menos un número"
         
-        # Verificar que tenga al menos un carácter especial
-        if not re.search(r'[!@#$%^&*(),.?":{}|<>]', password):
-            return False, "La contraseña debe tener al menos un carácter especial (!@#$%^&* etc.)"
+    # Verificar que tenga al menos un carácter especial
+    if not re.search(r'[!@#$%^&*(),.?":{}|<>]', password):
+        return False, "La contraseña debe tener al menos un carácter especial (!@#$%^&* etc.)"
         
-        # Verificar que no tenga espacios
-        if ' ' in password:
-            return False, "La contraseña no puede contener espacios"
+    # Verificar que no tenga espacios
+    if ' ' in password:
+        return False, "La contraseña no puede contener espacios"
         
-        return True, "Contraseña válida"
+    return True, "Contraseña válida" 
 
 @staticmethod
 def validate_password_common(password):
@@ -552,12 +552,6 @@ def validate_user_data(nombre, email, password):
             # Validación básica con regex
             if not AuthService.validate_email_format(email):
                 errors.append("El formato del email no es válido")
-            else:
-                # Validación más estricta (opcional, puedes comentar esto si no quieres verificar dominio)
-                # is_valid, email_error = AuthService.validate_email_comprehensive(email)
-                # if not is_valid:
-                #     errors.append(f"Email inválido: {email_error}")
-                pass
         
         # Validar contraseña
         if not password:
@@ -576,6 +570,8 @@ def validate_user_data(nombre, email, password):
         return len(errors) == 0, errors
 
 @staticmethod
-def is_email_already_registered(email):
-        """Verificar si el email ya está registrado"""
-        return User.find_by_email(email) is not None
+def verify_2fa(email, code):
+    if code == "123456":  # Simulación
+        return {"success": True, "message": "2FA verificado"}, 200
+    else:
+        return {"error": "Código 2FA inválido"}, 401
