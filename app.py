@@ -1,10 +1,10 @@
 from flask import Flask
 from flask_restx import Api
+from flask_cors import CORS  # 👈 importa esto
 from config import Config
 from datetime import datetime
 import json
 
-# Custom JSON encoder para manejar datetime
 class CustomJSONEncoder(json.JSONEncoder):
     def default(self, obj):
         if isinstance(obj, datetime):
@@ -25,15 +25,17 @@ from routes.dev import api as dev_ns
 def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
-    app.json_encoder = CustomJSONEncoder  # Usar el encoder personalizado
+    app.json_encoder = CustomJSONEncoder  
 
-    # 🚀 Inicializar Flask-RESTX API
+    # 🔹 Habilitar CORS (clave para que React pueda conectarse)
+    CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
+
     api = Api(
         app,
         version="1.0",
         title="PWS Project API",
         description="API para el punto de venta en Flask con documentación automática",
-        doc="/docs",  # Ruta donde estará Swagger UI
+        doc="/docs",
         authorizations={
             'Bearer Auth': {
                 'type': 'apiKey',
