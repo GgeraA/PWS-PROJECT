@@ -2,6 +2,7 @@ import psycopg2
 from config import Config
 from datetime import datetime, timedelta, timezone
 import json
+from utils.audit_helper import log_event
 
 class UserSession:
     def __init__(self, id=None, user_id=None, session_token=None, created_at=None, 
@@ -81,6 +82,7 @@ class UserSession:
 
     @staticmethod
     def invalidate_session(session_token):
+        log_event("Logout attempt", session_token)
         conn = psycopg2.connect(**Config.DATABASE)
         cur = conn.cursor()
         cur.execute("""
