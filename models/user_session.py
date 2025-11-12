@@ -61,7 +61,7 @@ class UserSession:
         conn.close()
         if row:
             return UserSession(*row)
-        return None
+        return None  # ← Esto retorna None si no encuentra sesión activa
 
     @staticmethod
     def find_active_by_user(user_id):

@@ -3,6 +3,7 @@ from flask import request
 from services.auth_service import AuthService
 import jwt
 from config import Config
+from models.UserSessions import UserSession
 
 EMAIL_DESC = "Correo electrónico"
 
@@ -69,21 +70,34 @@ reset_password_model = api.model("ResetPassword", {
 
 # ------------------ Funciones helper ------------------
 def extract_token():
-    """Extrae el token del header Authorization"""
+    """Extrae el token del header Authorization y verifica en BD"""
     args = auth_parser.parse_args()
     auth_header = args.get('Authorization', '')
     if not auth_header.startswith(f'{BEARER} '):
         auth_header = request.headers.get('Authorization', '')
         if not auth_header.startswith(f'{BEARER} '):
             return None, {"error": ERR_FORMAT_TOKEN}, 401
+    
     token = auth_header.replace(f'{BEARER} ', '')
+    
+    # ✅ VERIFICACIÓN CRUCIAL: Revisar si la sesión está activa en BD
+    if not UserSession.find_by_token(token):
+        return None, {"error": "Sesión cerrada o expirada"}, 401
+    
     return token, None, None
 
 def decode_token(token):
-    """Decodifica JWT y devuelve payload o error"""
+    """Decodifica JWT y verifica en BD"""
     try:
+        # 1. Primero verifica si la sesión está activa en BD
+        session = UserSession.find_by_token(token)
+        if not session:
+            return None, {"error": "Sesión cerrada o expirada"}, 401
+        
+        # 2. Luego verifica la firma JWT
         payload = jwt.decode(token, Config.SECRET_KEY, algorithms=["HS256"])
         return payload, None, None
+        
     except jwt.ExpiredSignatureError:
         return None, {"error": ERR_TOKEN_EXPIRED}, 401
     except jwt.InvalidTokenError:
