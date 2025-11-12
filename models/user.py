@@ -192,14 +192,37 @@ class User:
 
     @staticmethod
     def create_user(nombre, email, password, rol="usuario"):
-        # Asegurar que el rol sea válido
-        if rol not in User.ALLOWED_ROLES:
-            rol = "usuario"
+        try:
+            print(f"🔍 USER.CREATE_USER - Iniciando: {email}")
             
-        user = User(
-            nombre=nombre,
-            email=email,
-            password=User.hash_password(password),
-            rol=rol
-        )
-        return user.save()
+            # Asegurar que el rol sea válido
+            if rol not in User.ALLOWED_ROLES:
+                rol = "usuario"
+            
+            # FORZAR encoding seguro en todos los datos
+            safe_nombre = str(nombre).encode('utf-8', 'ignore').decode('utf-8')
+            safe_email = str(email).encode('utf-8', 'ignore').decode('utf-8')
+            safe_password = str(password).encode('utf-8', 'ignore').decode('utf-8')
+            safe_rol = str(rol).encode('utf-8', 'ignore').decode('utf-8')
+            
+            print(f"🔍 USER.CREATE_USER - Datos seguros creados")
+            
+            # Crear hash de contraseña de manera segura
+            password_hash = generate_password_hash(safe_password)
+            
+            print(f"🔍 USER.CREATE_USER - Password hasheado")
+            
+            user = User(
+                nombre=safe_nombre,
+                email=safe_email,
+                password=password_hash,
+                rol=safe_rol
+            )
+            
+            user_id = user.save()
+            print(f"✅ USER.CREATE_USER - Usuario guardado: {user_id}")
+            return user_id
+            
+        except Exception as e:
+            print(f"❌ USER.CREATE_USER - Error: {type(e).__name__}: {str(e)}")
+            raise e

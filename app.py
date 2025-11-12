@@ -27,8 +27,8 @@ def create_app():
     app.config.from_object(Config)
     app.json_encoder = CustomJSONEncoder  
 
-    # 🔹 Habilitar CORS (clave para que React pueda conectarse)
-    CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
+    # 🔹 Configuración COMPLETA de CORS
+    CORS(app, origins=["http://localhost:5173"], supports_credentials=True)
 
     api = Api(
         app,

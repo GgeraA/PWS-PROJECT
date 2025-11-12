@@ -102,20 +102,23 @@ class AuthService:
             if AuthService.is_email_already_registered(email):
                 return {"error": "El email ya está registrado"}, 400
 
-            # Si todo está bien, crear el usuario
+            # Validaciones 
+            if not all([nombre, email, password]):
+                return {"error": "Todos los campos son requeridos"}, 400
+
+            # Crear el usuario
             user_id = User.create_user(nombre, email, password, rol)
             log_event("REGISTER", email, "SUCCESS", f"Usuario creado: {nombre}")
+            log_event("REGISTER", "SYSTEM", "SUCCESS", f"Usuario registrado: {email}")
 
             return {
                 "message": "Usuario registrado exitosamente",
-                "user_id": user_id
+                "user_id": user_id,
+                "email": email
             }, 201
 
-        except psycopg2.IntegrityError as e:
-            log_event("REGISTER", email, "ERROR", f"Error de integridad: {str(e)}")
-            return {"error": "Error en los datos proporcionados"}, 400
         except Exception as e:
-            log_event("REGISTER", email, "ERROR", str(e))
+            log_event("REGISTER", "SYSTEM", "ERROR", f"Error: {str(e)}")
             return {"error": "Error interno del servidor"}, 500
 
     @staticmethod
@@ -186,8 +189,12 @@ class AuthService:
             # Verificar credenciales
             user = User.find_by_email(email)
             if not user or not user.check_password(password):
-                log_event("LOGIN", email, "FAILED",NOUSER)
-                return {"error": NOUSER}, 401
+                log_event("LOGIN", email, "FAILED", "Credenciales inválidas o Usuario No encontrado")
+                return {"error": "Credenciales inválidas"}, 401
+
+            print(f"🔍 LOGIN - Verificando sesiones activas para usuario {user.id}")
+            active_sessions = UserSession.find_active_by_user(user.id)
+            print(f"🔍 LOGIN - Sesiones activas encontradas: {len(active_sessions)}")
 
             # Verificar sesiones activas
             session_check = AuthService._check_active_sessions(user.id)
@@ -227,7 +234,6 @@ class AuthService:
                     "2fa_required": True
                 })
 
-            # evitar que falle si location_data no es dict
             loc_city = location_data.get('city', 'Unknown') if isinstance(location_data, dict) else 'Unknown'
             log_event("LOGIN", email, "SUCCESS",
                       f"Latencia={time.time()-start:.3f}s, IP={ip_address}, Location={loc_city}")
@@ -268,10 +274,10 @@ class AuthService:
 
     @staticmethod
     def logout(session_token):
-        log_event("Logout attempt", session_token)
         try:
             success = UserSession.invalidate_session(session_token)
             if not success:
+                log_event("LOGOUT", "SYSTEM", "ERROR", "Sesión no encontrada o ya cerrada")
                 return {"error": "Sesión no encontrada o ya cerrada"}, 404
 
             log_event("LOGOUT", "SYSTEM", "SUCCESS", f"Sesión cerrada: {session_token[:10]}...")

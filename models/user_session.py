@@ -49,20 +49,23 @@ class UserSession:
 
     @staticmethod
     def find_by_token(session_token):
+        print(f"🔍 Buscando sesión con token: {session_token[:20]}...")  # DEBUG
         conn = psycopg2.connect(**Config.DATABASE)
         cur = conn.cursor()
         cur.execute("""
             SELECT id, user_id, session_token, created_at, expires_at, 
-                   is_active, ip_address, user_agent, location_data, last_activity
+                is_active, ip_address, user_agent, location_data, last_activity
             FROM user_sessions 
             WHERE session_token=%s AND is_active=true AND expires_at > NOW()
         """, (session_token,))
         row = cur.fetchone()
         cur.close()
         conn.close()
+    
+        print(f"📋 Resultado de BD: {row}")  # DEBUG
         if row:
             return UserSession(*row)
-        return None  # ← Esto retorna None si no encuentra sesión activa
+        return None
 
     @staticmethod
     def find_active_by_user(user_id):
@@ -70,9 +73,9 @@ class UserSession:
         cur = conn.cursor()
         cur.execute("""
             SELECT id, user_id, session_token, created_at, expires_at, 
-                   is_active, ip_address, user_agent, location_data, last_activity
+                is_active, ip_address, user_agent, location_data, last_activity
             FROM user_sessions 
-            WHERE user_id=%s AND is_active=true AND expires_at > NOW()
+            WHERE user_id=%s AND expires_at > NOW() 
             ORDER BY created_at DESC
         """, (user_id,))
         rows = cur.fetchall()
@@ -82,33 +85,46 @@ class UserSession:
 
     @staticmethod
     def invalidate_session(session_token):
-        log_event("Logout attempt", session_token)
-        conn = psycopg2.connect(**Config.DATABASE)
-        cur = conn.cursor()
-        cur.execute("""
-            UPDATE user_sessions 
-            SET is_active=false 
-            WHERE session_token=%s AND is_active=true
-            RETURNING id
-        """, (session_token,))
-        row = cur.fetchone()
-        conn.commit()
-        cur.close()
-        conn.close()
-        return bool(row)
+        """ELIMINA físicamente la sesión de la base de datos"""
+        try:
+            conn = psycopg2.connect(**Config.DATABASE)
+            cur = conn.cursor()
+            cur.execute("""
+                DELETE FROM user_sessions 
+                WHERE session_token=%s AND is_active=true
+                RETURNING id
+            """, (session_token,))
+            row = cur.fetchone()
+            conn.commit()
+            cur.close()
+            conn.close()
+        
+            print(f"🗑️ Sesión eliminada: {session_token[:20]}...")
+            return bool(row)
+        except Exception as e:
+            print(f"❌ ERROR en invalidate_session: {e}")
+            return False
 
     @staticmethod
     def invalidate_all_user_sessions(user_id):
-        conn = psycopg2.connect(**Config.DATABASE)
-        cur = conn.cursor()
-        cur.execute("""
-            UPDATE user_sessions 
-            SET is_active=false 
-            WHERE user_id=%s AND is_active=true
-        """, (user_id,))
-        conn.commit()
-        cur.close()
-        conn.close()
+        """Elimina TODAS las sesiones de un usuario"""
+        try:
+            conn = psycopg2.connect(**Config.DATABASE)
+            cur = conn.cursor()
+            cur.execute("""
+                DELETE FROM user_sessions 
+                WHERE user_id=%s
+            """, (user_id,))
+            deleted_count = cur.rowcount
+            conn.commit()
+            cur.close()
+            conn.close()
+
+            print(f"🗑️ Todas las sesiones eliminadas para usuario {user_id}: {deleted_count}")
+            return deleted_count
+        except Exception as e:
+            print(f"❌ ERROR en invalidate_all_user_sessions: {e}")
+            return 0
 
     @staticmethod
     def cleanup_expired():
@@ -123,6 +139,28 @@ class UserSession:
         conn.commit()
         cur.close()
         conn.close()
+
+    @staticmethod
+    def cleanup_old_sessions(days_old=2):
+        """Eliminar sesiones inactivas o expiradas más viejas de X días"""
+        try:
+            conn = psycopg2.connect(**Config.DATABASE)
+            cur = conn.cursor()
+            cur.execute("""
+                DELETE FROM user_sessions 
+                WHERE (is_active = false OR expires_at < NOW()) 
+                AND created_at < NOW() - INTERVAL '%s days'
+            """, (days_old,))
+            deleted_count = cur.rowcount
+            conn.commit()
+            cur.close()
+            conn.close()
+        
+            print(f"🧹 Sesiones antiguas eliminadas: {deleted_count}")
+            return deleted_count
+        except Exception as e:
+            print(f"❌ ERROR en cleanup_old_sessions: {e}")
+            return 0
 
     @staticmethod
     def refresh_session(session_token, extension_hours=24):

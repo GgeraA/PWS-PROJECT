@@ -4,10 +4,15 @@ from dotenv import load_dotenv
 load_dotenv()
 
 class Config:
-    DATABASE = { "dbname": "seguridad", "user": "postgres", "password": "1234", "host": "localhost", "port": 5432 }
+    DATABASE = { 
+        "database": "seguridad",  
+        "user": "postgres", 
+        "password": "123456", 
+        "host": "localhost", 
+        "port": 5432 
+    }
     
     SECRET_KEY = os.getenv("SECRET_KEY", "fallback-secret")
-    
     DATABASE_URL = os.getenv("DATABASE_URL")
 
     # Config correo
@@ -18,5 +23,4 @@ class Config:
     MAIL_PASSWORD = os.getenv("MAIL_PASSWORD")
     MAIL_DEFAULT_SENDER = os.getenv("MAIL_DEFAULT_SENDER")
     
-    SECRET_KEY = os.environ.get("SECRET_KEY", "supersecret")
     JWT_EXP_DELTA_SECONDS = 300  # 5 minutos
