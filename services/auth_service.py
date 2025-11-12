@@ -16,6 +16,7 @@ import re
 import dns.resolver
 from email_validator import validate_email, EmailNotValidError
 
+NOUSER = "Credenciales inválidas o Usuario No encontrado"
 
 class AuthService:
 
@@ -185,8 +186,8 @@ class AuthService:
             # Verificar credenciales
             user = User.find_by_email(email)
             if not user or not user.check_password(password):
-                log_event("LOGIN", email, "FAILED", "Credenciales inválidas")
-                return {"error": "Credenciales inválidas"}, 401
+                log_event("LOGIN", email, "FAILED",NOUSER)
+                return {"error": NOUSER}, 401
 
             # Verificar sesiones activas
             session_check = AuthService._check_active_sessions(user.id)
@@ -267,6 +268,7 @@ class AuthService:
 
     @staticmethod
     def logout(session_token):
+        log_event("Logout attempt", session_token)
         try:
             success = UserSession.invalidate_session(session_token)
             if not success:

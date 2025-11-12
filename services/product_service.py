@@ -1,46 +1,55 @@
-# app/services/product_service.py
 from models.Product import Product
 
-# Crear producto
 def create_product(data):
     product = Product(
-        Code=data['Code'],
-        Name=data['Name'],
-        Description=data.get('Description'),
-        Category=data.get('Category'),
-        Unit=data.get('Unit'),
-        Minimum_Stock=data.get('Minimum_Stock', 0),
-        Current_Stock=data.get('Current_Stock', 0),
-        Price=data['Price']
+        code=data.get('Code'),
+        name=data.get('Name'),
+        description=data.get('Description'),
+        category=data.get('Category'),
+        unit=data.get('Unit'),
+        minimum_stock=data.get('Minimum_Stock', 0),
+        current_stock=data.get('Current_Stock', 0),
+        price=data.get('Price', 0.0),
+        barcode=data.get('Barcode'),
+        brand=data.get('Brand'),
+        cost_price=data.get('CostPrice'),
+        maximum_stock=data.get('Maximum_Stock', 0),
+        tax_rate=data.get('TaxRate', 0.0),
+        supplier=data.get('Supplier'),
+        location=data.get('Location')
     )
-    product.save()
-    return product
+    product_id = product.save()
+    return Product.find_by_id(product_id).to_dict()
 
-# Obtener todos los productos
 def get_all_products():
-    return Product.get_all()
+    products = Product.get_all()
+    return [product.to_dict() for product in products]
 
-
-# Obtener producto por ID
 def get_product(product_id):
-    return Product.find_by_id(product_id)
+    product = Product.find_by_id(product_id)
+    return product.to_dict() if product else None
 
-# Actualizar producto
 def update_product(product_id, data):
     product = Product.find_by_id(product_id)
-    if not product:
-        return None
-    product.Code = data.get('Code', product.Code)
-    product.Name = data.get('Name', product.Name)
-    product.Description = data.get('Description', product.Description)
-    product.Category = data.get('Category', product.Category)
-    product.Unit = data.get('Unit', product.Unit)
-    product.Minimum_Stock = data.get('Minimum_Stock', product.Minimum_Stock)
-    product.Current_Stock = data.get('Current_Stock', product.Current_Stock)
-    product.Price = data.get('Price', product.Price)
-    product.update()
-    return product
+    if product:
+        product.code = data.get('Code', product.code)
+        product.name = data.get('Name', product.name)
+        product.description = data.get('Description', product.description)
+        product.category = data.get('Category', product.category)
+        product.unit = data.get('Unit', product.unit)
+        product.minimum_stock = data.get('Minimum_Stock', product.minimum_stock)
+        product.current_stock = data.get('Current_Stock', product.current_stock)
+        product.price = data.get('Price', product.price)
+        product.barcode = data.get('Barcode', product.barcode)
+        product.brand = data.get('Brand', product.brand)
+        product.cost_price = data.get('CostPrice', product.cost_price)
+        product.maximum_stock = data.get('Maximum_Stock', product.maximum_stock)
+        product.tax_rate = data.get('TaxRate', product.tax_rate)
+        product.supplier = data.get('Supplier', product.supplier)
+        product.location = data.get('Location', product.location)
+        product.update()
+        return product.to_dict()
+    return None
 
-# Eliminar producto
 def delete_product(product_id):
     return Product.delete(product_id)
