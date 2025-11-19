@@ -12,11 +12,11 @@ def test_create_product_instance():
         unit="pcs",
         minimum_stock=5,
         current_stock=10,
-        price=15000.0
+        price=500.0
     )
     assert p.code == "LTP001"
     assert p.name == "Laptop"
-    assert p.price == 15000.0
+    assert p.price == 500.0
     assert p.category == "Electronics"
 
 def test_create_product_minimal():
@@ -30,7 +30,7 @@ def test_get_all_products(mock_db_connect):
     """Prueba obtener todos los productos"""
     _, _, cur = mock_db_connect
     cur.fetchall.return_value = [
-        (1, "C1", "Laptop", "High-end", "Electronics", "pcs", 1, 10, 15000)
+        (1, "C1", "Laptop", "High-end", "Electronics", "pcs", 1, 10, 500)
     ]
     products = Product.get_all()
     assert len(products) == 1
@@ -40,7 +40,7 @@ def test_get_all_products(mock_db_connect):
 def test_find_by_id_found(mock_db_connect):
     """Prueba buscar producto por ID (encontrado)"""
     _, _, cur = mock_db_connect
-    cur.fetchone.return_value = (1, "C1", "Laptop", "High-end", "Electronics", "pcs", 1, 10, 15000)
+    cur.fetchone.return_value = (1, "C1", "Laptop", "High-end", "Electronics", "pcs", 1, 10, 500)
     
     result = Product.find_by_id(1)
     assert result is not None
@@ -57,8 +57,8 @@ def test_find_by_id_not_found(mock_db_connect):
 
 def test_save_new_product(mock_db_connect):
     """Prueba guardar nuevo producto"""
-    conn, _, cur = mock_db_connect
-    cur.fetchone.return_value = [123]  # Simular ID generado
+    _, _, cur = mock_db_connect
+    cur.fetchone.return_value = (123,)  # Simular ID generado
     
     product = Product(
         code="NEW001", 
@@ -72,7 +72,7 @@ def test_save_new_product(mock_db_connect):
 
 def test_update_product(mock_db_connect):
     """Prueba actualizar producto existente"""
-    conn, _, cur = mock_db_connect
+    _, _, _ = mock_db_connect
     
     product = Product(
         product_id=1,
@@ -87,7 +87,7 @@ def test_update_product(mock_db_connect):
 def test_delete_product_success(mock_db_connect):
     """Prueba eliminar producto (éxito)"""
     _, _, cur = mock_db_connect
-    cur.fetchone.return_value = [1]  # Producto eliminado
+    cur.fetchone.return_value = (1,)  # Producto eliminado
     
     result = Product.delete(1)
     assert result is True
