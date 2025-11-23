@@ -10,6 +10,7 @@ from config import Config
 from models.user import User
 from models.user_session import UserSession
 from werkzeug.security import check_password_hash
+from flask_mail import Message
 from utils.email_helper import send_email
 from utils.audit_helper import log_event
 import re
@@ -437,26 +438,49 @@ class AuthService:
             if not user:
                 return {"error": "Usuario no encontrado"}, 404
 
-            # Simulación envío de correo
-            result = send_email(user.email, "Recuperación de usuario", f"Tu nombre de usuario es: {user.nombre}")
+            print(f"📧 Enviando recuperación de usuario via Brevo a: {email}")
 
-            log_event("RECOVER_USER", email, "SUCCESS", f"Latencia={result.get('latency', 0)}s")
-            return {"message": "Nombre de usuario enviado correctamente"}, 200
+            subject = "Recuperación de Usuario - POS-ML"
+            body = f"""
+            Hola {user.nombre},
+
+            Has solicitado recuperar tu nombre de usuario.
+
+            Tu nombre de usuario es: {user.nombre}
+        
+            Si no solicitaste esta acción, por favor ignora este mensaje.
+
+            Saludos,
+            Equipo POS-ML
+            """
+
+            result = send_email(user.email, subject, body)
+
+            print(f"📨 Resultado Brevo: {result}")
+        
+            if result.get("status") == "error":
+                return {"error": f"No se pudo enviar el email: {result.get('error')}"}, 500
+
+            log_event("RECOVER_USER", email, "SUCCESS", f"Brevo - Latencia: {result.get('latency', 0)}s")
+            return {"message": "Nombre de usuario enviado correctamente a tu email"}, 200
 
         except Exception as e:
             log_event("RECOVER_USER", email, "ERROR", str(e))
-            return {"error": str(e)}, 500
+            return {"error": "Error interno del servidor"}, 500
 
     @staticmethod
     def recover_password(email):
         try:
             user = User.find_by_email(email)
             if not user:
-                return {"error": "Usuario no encontrado"}, 404
+                # Por seguridad, no revelar si el email existe
+                return {"message": "Si el email existe, se enviarán instrucciones de recuperación"}, 200
 
             # Generar token temporal
-            token = secrets.token_urlsafe(16)
-            expira_en = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(minutes=30)
+            token = secrets.token_urlsafe(32)
+        
+            # USAR timestamp sin timezone para coincidir con la BD
+            expira_en = datetime.datetime.now() + datetime.timedelta(minutes=30)  # 👈 QUITAR timezone.utc
 
             # Guardar token en BD
             conn = psycopg2.connect(**Config.DATABASE)
@@ -469,46 +493,129 @@ class AuthService:
             cur.close()
             conn.close()
 
-            reset_link = f"https://tuapp.com/reset-password/{token}"
-            send_email(user.email, "Recuperación de contraseña", f"Usa este enlace: {reset_link}")
+            print(f"📧 Enviando recuperación de contraseña via Brevo a: {email}")
+            print(f"🔑 Token generado: {token}")  # 👈 DEBUG - eliminar después
+    
+            # Enlace de reset
+            reset_link = f"http://localhost:5173/reset-password?token={token}"
+    
+            subject = "Recuperación de Contraseña - POS-ML"
+            body = f"""
+            Hola {user.nombre},
 
-            return {"message": "Enlace de recuperación enviado"}, 200
+            Has solicitado recuperar tu contraseña.
+
+            Usa el siguiente enlace para restablecer tu contraseña:
+            {reset_link}
+
+            Este enlace expirará en 30 minutos.
+
+            Si no solicitaste esta acción, por favor ignora este mensaje.
+
+            Saludos,
+            Equipo POS-ML
+            """
+    
+            result = send_email(user.email, subject, body)
+
+            print(f"📨 Resultado Brevo recover_password: {result}")
+    
+            if result.get("status") == "error":
+                return {"error": f"No se pudo enviar el email: {result.get('error')}"}, 500
+
+            log_event("RECOVER_PASSWORD", email, "SUCCESS", f"Brevo - Latencia: {result.get('latency', 0)}s")
+            return {"message": "Enlace de recuperación enviado correctamente a tu email"}, 200
 
         except Exception as e:
-            return {"error": str(e)}, 500
+            log_event("RECOVER_PASSWORD", email, "ERROR", str(e))
+            return {"error": "Error interno del servidor"}, 500
 
     @staticmethod
     def reset_password(token, new_password):
-        # Implementar lógica de reset de contraseña (buscar token, validar expiración, actualizar password)
+        """Restablecer contraseña con token válido - Versión mejorada"""
         try:
-            # Ejemplo esquemático
             conn = psycopg2.connect(**Config.DATABASE)
             cur = conn.cursor()
-            cur.execute("SELECT email, expira_en FROM password_resets WHERE token = %s", (token,))
+        
+            # Buscar token válido y no expirado
+            cur.execute("""
+                SELECT email, expira_en 
+                FROM password_resets 
+                WHERE token = %s AND expira_en > NOW()
+            """, (token,))
+        
             row = cur.fetchone()
             if not row:
                 cur.close()
                 conn.close()
-                return {"error": "Token inválido"}, 400
+                return {"error": "Token inválido o expirado"}, 400
 
             email_db, expira_en = row[0], row[1]
-            if expira_en < datetime.datetime.now(datetime.timezone.utc):
+        
+            # Validar fortaleza de nueva contraseña
+            is_valid, password_error = AuthService.validate_password_strength(new_password)
+            if not is_valid:
                 cur.close()
                 conn.close()
-                return {"error": "Token expirado"}, 400
+                return {"error": password_error}, 400
 
-            # Actualizar contraseña (asumiendo User.update_password existe)
-            User.update_password(email_db, new_password)
+            # Buscar usuario
+            user = User.find_by_email(email_db)
+            if not user:
+                cur.close()
+                conn.close()
+                return {"error": "Usuario no encontrado"}, 404
 
-            # eliminar token
+            # Actualizar contraseña - Diferentes enfoques:
+        
+            # Opción A: Si User tiene método update_password
+            if hasattr(User, 'update_password'):
+                success = User.update_password(email_db, new_password)
+                if not success:
+                    cur.close()
+                    conn.close()
+                    return {"error": "Error al actualizar contraseña"}, 500
+                
+            # Opción B: Actualizar directamente
+            else:
+                from werkzeug.security import generate_password_hash
+                password_hash = generate_password_hash(new_password)
+                cur.execute("""
+                    UPDATE users 
+                    SET password = %s, updated_at = NOW()
+                    WHERE email = %s
+                """, (password_hash, email_db))
+        
+            # Eliminar token usado
             cur.execute("DELETE FROM password_resets WHERE token = %s", (token,))
             conn.commit()
             cur.close()
             conn.close()
 
+            # Enviar email de confirmación
+            try:
+                subject = "Contraseña Actualizada - POS-ML"
+                body = f"""
+                Hola {user.nombre},
+
+                Tu contraseña ha sido actualizada exitosamente.
+
+                Si no realizaste esta acción, por favor contacta al administrador inmediatamente.
+
+                Saludos,
+                Equipo POS-ML
+                """
+                send_email(email_db, subject, body)
+            except Exception as email_error:
+                print(f"⚠️ No se pudo enviar email de confirmación: {email_error}")
+                # No fallar el reset por error de email
+
+            log_event("RESET_PASSWORD", email_db, "SUCCESS", "Contraseña restablecida exitosamente")
             return {"message": "Contraseña actualizada correctamente"}, 200
+        
         except Exception as e:
-            return {"error": str(e)}, 500
+            log_event("RESET_PASSWORD", "SYSTEM", "ERROR", str(e))
+            return {"error": "Error interno del servidor"}, 500
 
     # ----------------------------- Validaciones de Usuario y correo ------------------------------
     @staticmethod

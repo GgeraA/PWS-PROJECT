@@ -1,6 +1,9 @@
 from flask import Flask
+from dotenv import load_dotenv
+load_dotenv()
+
 from flask_restx import Api
-from flask_cors import CORS  # 👈 importa esto
+from flask_cors import CORS
 from config import Config
 from datetime import datetime
 import json
@@ -10,17 +13,8 @@ class CustomJSONEncoder(json.JSONEncoder):
         if isinstance(obj, datetime):
             return obj.isoformat()
         return super().default(obj)
-
-# Importar namespaces
-from routes.suppliers import api as suppliers_ns
-from routes.products import api as products_ns
-from routes.sales import api as sales_ns
-from routes.sale_details import api as sale_details_ns
-from routes.movement import api as movements_ns
-from routes.user import api as users_ns
-from routes.auth import api as auth_ns
-from routes.roles import api as roles_ns
-from routes.dev import api as dev_ns
+    
+from extensions import mail    
 
 def create_app():
     app = Flask(__name__)
@@ -29,6 +23,9 @@ def create_app():
 
     # 🔹 Configuración COMPLETA de CORS
     CORS(app, origins=["http://localhost:5173"], supports_credentials=True)
+
+    # 👇 Inicializar Flask-Mail con la aplicación
+    mail.init_app(app)
 
     api = Api(
         app,
@@ -46,6 +43,17 @@ def create_app():
         },
         security='Bearer Auth'
     )
+
+    # 🔹 IMPORTANTE: Importar namespaces DESPUÉS de crear api y app
+    from routes.suppliers import api as suppliers_ns
+    from routes.products import api as products_ns
+    from routes.sales import api as sales_ns
+    from routes.sale_details import api as sale_details_ns
+    from routes.movement import api as movements_ns
+    from routes.user import api as users_ns
+    from routes.auth import api as auth_ns
+    from routes.roles import api as roles_ns
+    from routes.dev import api as dev_ns
 
     # Registrar Namespaces
     api.add_namespace(products_ns, path="/products")

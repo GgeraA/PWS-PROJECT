@@ -1,6 +1,8 @@
 from flask_restx import Namespace, Resource, fields, reqparse
 from flask import request
 from services.auth_service import AuthService
+from flask_mail import Message
+from extensions import mail 
 import jwt
 from config import Config
 from models.user_session import UserSession
@@ -111,11 +113,10 @@ recover_password_model = api.model("RecoverPassword", {
     "email": fields.String(required=True, description=EMAIL_DESC)
 })
 
-reset_password_model = api.model("ResetPassword", {
-    "token": fields.String(required=True, description="Token de reset"),
-    "new_password": fields.String(required=True, description="Nueva contraseña")
+reset_password_model = api.model('ResetPassword', {
+    'token': fields.String(required=True, description='Token de recuperación'),
+    'new_password': fields.String(required=True, description='Nueva contraseña')
 })
-
 # ------------------ Funciones helper ------------------
 def extract_token():
     """Extrae el token del header Authorization - Versión segura"""
@@ -322,41 +323,80 @@ class Verify2FA(Resource):
         )
         return result, status
 
-@api.route("/recover-user")
+@api.route('/recover-user')
 class RecoverUser(Resource):
     @api.expect(recover_user_model)
-    @api.response(200, "Usuario recuperado")
-    @api.response(404, "Usuario no encontrado")
     def post(self):
         """Recuperar nombre de usuario"""
-        data = api.payload
-        result, status = AuthService.recover_user(data.get('email'))
-        return result, status
-
-@api.route("/recover-password")
+        try:
+            data = request.get_json()
+            email = data.get('email')
+            
+            # Aquí tu lógica para buscar el usuario en la base de datos
+            # user = User.query.filter_by(email=email).first()
+            # if not user:
+            #     return {"error": "Usuario no encontrado"}, 404
+            
+            # Email de prueba
+            msg = Message(
+                subject="Recuperación de Usuario - PWS Project",
+                recipients=[email],
+                body=f"Has solicitado recuperar tu usuario. Tu usuario es: [USUARIO_AQUI]"
+            )
+            
+            mail.send(msg)
+            
+            return {
+                "message": "Email de recuperación enviado exitosamente",
+                "email": email
+            }, 200
+            
+        except Exception as e:
+            print(f"Error en recover-user: {str(e)}")
+            return {"error": "Error interno del servidor"}, 500
+        
+@api.route('/recover-password')
 class RecoverPassword(Resource):
     @api.expect(recover_password_model)
-    @api.response(200, "Enlace enviado")
-    @api.response(404, "Usuario no encontrado")
     def post(self):
         """Solicitar recuperación de contraseña"""
-        data = api.payload
-        result, status = AuthService.recover_password(data.get('email'))
-        return result, status
+        try:
+            data = request.get_json()
+            email = data.get('email')
+            result, status = AuthService.recover_password(email)
+            return result, status
+        except Exception as e:
+            print(f"Error en recover-password endpoint: {str(e)}")
+            return {"error": "Error interno del servidor"}, 500
 
-@api.route("/reset-password")
+    # 👇 AGREGAR MÉTODO OPTIONS PARA CORS
+    def options(self):
+        return {}, 200        
+
+@api.route('/reset-password')
 class ResetPassword(Resource):
     @api.expect(reset_password_model)
-    @api.response(200, "Contraseña actualizada")
-    @api.response(400, "Token inválido o expirado")
     def post(self):
-        """Resetear contraseña con token"""
-        data = api.payload
-        result, status = AuthService.reset_password(
-            data.get('token'),
-            data.get('new_password')
-        )
-        return result, status
+        """Restablecer contraseña con token"""
+        try:
+            data = request.get_json()
+            token = data.get('token')
+            new_password = data.get('new_password')
+            
+            if not token or not new_password:
+                return {"error": "Token y nueva contraseña son requeridos"}, 400
+            
+            # Llamar al servicio de autenticación
+            result, status_code = AuthService.reset_password(token, new_password)
+            return result, status_code
+            
+        except Exception as e:
+            print(f"Error en reset-password endpoint: {str(e)}")
+            return {"error": "Error interno del servidor"}, 500
+        
+        # 👇 AGREGAR MÉTODO OPTIONS PARA CORS
+    def options(self):
+        return {}, 200    
 
 @api.route("/logout-test")
 class LogoutTest(Resource):
@@ -377,3 +417,52 @@ class LogoutTest(Resource):
     
     def options(self):
         return {}, 200
+    
+#------------------ Fin de routes/auth.py ------------------
+#------------------Temporales------------------
+# En routes/auth.py, agrega esta ruta temporal
+@api.route('/debug-mail-config')
+class DebugMailConfig(Resource):
+    def get(self):
+        """Debug: Ver configuración de email"""
+        from flask import current_app
+        return {
+            "MAIL_SERVER": current_app.config.get('MAIL_SERVER'),
+            "MAIL_PORT": current_app.config.get('MAIL_PORT'),
+            "MAIL_USERNAME": current_app.config.get('MAIL_USERNAME'),
+            "MAIL_PASSWORD": current_app.config.get('MAIL_PASSWORD')[:20] + "..." if current_app.config.get('MAIL_PASSWORD') else None,
+            "MAIL_DEFAULT_SENDER": current_app.config.get('MAIL_DEFAULT_SENDER')
+        }, 200
+    
+#------------------Fin Temporales------------------
+@api.route('/debug-token/<token>')
+class DebugToken(Resource):
+    def get(self, token):
+        """Debug: Verificar token"""
+        try:
+            conn = psycopg2.connect(**Config.DATABASE)
+            cur = conn.cursor()
+            
+            cur.execute("""
+                SELECT email, expira_en, NOW() as current_time
+                FROM password_resets 
+                WHERE token = %s
+            """, (token,))
+            
+            row = cur.fetchone()
+            cur.close()
+            conn.close()
+            
+            if row:
+                return {
+                    "token_exists": True,
+                    "email": row[0],
+                    "expira_en": row[1],
+                    "current_time": row[2],
+                    "is_valid": row[1] > row[2] if row[1] else False
+                }, 200
+            else:
+                return {"token_exists": False}, 404
+                
+        except Exception as e:
+            return {"error": str(e)}, 500

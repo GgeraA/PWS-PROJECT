@@ -226,3 +226,28 @@ class User:
         except Exception as e:
             print(f"❌ USER.CREATE_USER - Error: {type(e).__name__}: {str(e)}")
             raise e
+        
+    @staticmethod
+    def update_password(email, new_password):
+        """Actualizar contraseña de usuario"""
+        try:
+            conn = psycopg2.connect(**Config.DATABASE)
+            cur = conn.cursor()
+        
+            password_hash = User.hash_password(new_password)
+            cur.execute("""
+                UPDATE users 
+                SET password = %s, updated_at = NOW()
+                WHERE email = %s
+                RETURNING id
+            """, (password_hash, email))
+        
+            row = cur.fetchone()
+            conn.commit()
+            cur.close()
+            conn.close()
+        
+            return bool(row)
+        except Exception as e:
+            print(f"❌ Error actualizando contraseña: {e}")
+            return False    

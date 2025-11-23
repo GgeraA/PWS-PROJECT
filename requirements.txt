@@ -6,3 +6,4 @@ pytest
 pytest-cov
 email-validator
 python-dotenv
+Flask-Mail
