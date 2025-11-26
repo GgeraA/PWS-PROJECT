@@ -8,7 +8,7 @@ Flask-CORS==4.0.0
 Flask-Mail==0.9.1
 
 # === DATABASE ===
-psycopg2-binary==2.9.7
+psycopg2-binary>=2.9.9
 
 # === AUTH & SECURITY ===
 PyJWT==2.8.0
