@@ -82,21 +82,23 @@ def create_app():
     from routes.reports import api as reports_ns
     from routes.ml_routes import api as ml_ns
     from routes.forecast_routes import api as forecast_ns
+    from routes.ml_routes import api as ml_nsRecomendation
 
     # Registrar Namespaces
-    api.add_namespace(products_ns, path="/api/products")
-    api.add_namespace(suppliers_ns, path="/api/suppliers")
-    api.add_namespace(sales_ns, path="/api/sales")
-    api.add_namespace(sale_details_ns, path="/api/sale-details")
-    api.add_namespace(movements_ns, path="/api/movements")
-    api.add_namespace(users_ns, path="/api/users")
-    api.add_namespace(auth_ns, path="/api/auth")
-    api.add_namespace(roles_ns, path="/api/roles")
-    api.add_namespace(dev_ns, path="/api/dev")
-    api.add_namespace(sales_report_ns, path="/api/sales-report")
-    api.add_namespace(reports_ns, path="/api/reports")
-    api.add_namespace(forecast_ns, path='/api/ml/forecast')
-    api.add_namespace(ml_ns, path='/api/ml')
+    api.add_namespace(products_ns, path="/products")
+    api.add_namespace(suppliers_ns, path="/suppliers")
+    api.add_namespace(sales_ns, path="/sales")
+    api.add_namespace(sale_details_ns, path="/sale-details")
+    api.add_namespace(movements_ns, path="/movements")
+    api.add_namespace(users_ns, path="/users")
+    api.add_namespace(auth_ns, path="/auth")
+    api.add_namespace(roles_ns, path="/roles")
+    api.add_namespace(dev_ns, path="/dev")
+    api.add_namespace(sales_report_ns, path="/sales-report")
+    api.add_namespace(reports_ns, path="/reports")
+    api.add_namespace(forecast_ns, path='/ml/forecast')
+    #api.add_namespace(ml_ns, path='/ml')
+    api.add_namespace(ml_nsRecomendation, path='/ml')
 
     # 🔥 HEALTH CHECK endpoint para Render
     @app.route('/health')
