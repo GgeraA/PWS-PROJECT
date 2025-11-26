@@ -1,9 +1,16 @@
-Flask
-requests
-PyJWT
-psycopg2-binary
-pytest
-pytest-cov
-email-validator
-python-dotenv
-Flask-Mail
+# requirements.txt PARA RENDER (Producción)
+Flask==2.3.3
+Flask-RESTX==1.1.0
+Flask-CORS==4.0.0
+Flask-Mail==0.9.1
+psycopg2-binary==2.9.7
+python-dotenv==1.0.0
+PyJWT==2.8.0
+email-validator==2.0.0
+twilio==8.10.0
+requests==2.31.0
+gunicorn==21.2.0
+pandas==2.1.4
+numpy==1.25.2
+scikit-learn==1.3.2
+Werkzeug==2.3.7

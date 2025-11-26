@@ -1,5 +1,7 @@
-from flask import Flask
+import os
+from flask import Flask, jsonify
 from dotenv import load_dotenv
+
 load_dotenv()
 
 from flask_restx import Api
@@ -21,11 +23,33 @@ def create_app():
     app.config.from_object(Config)
     app.json_encoder = CustomJSONEncoder  
 
-    # 🔹 Configuración COMPLETA de CORS
-    CORS(app, origins=["http://localhost:5173"], supports_credentials=True)
+    # 🔹 Configuración de CORS para producción y desarrollo
+    allowed_origins = [
+        "http://localhost:5173",
+        "http://localhost:3000", 
+        "https://tu-frontend-en-render.onrender.com"  # ACTUALIZAR con tu URL real
+    ]
+    
+    CORS(app, 
+         origins=allowed_origins, 
+         supports_credentials=True,
+         methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+         allow_headers=["Content-Type", "Authorization", "X-Requested-With"])
 
     # 👇 Inicializar Flask-Mail con la aplicación
     mail.init_app(app)
+
+    # 🔥 INICIALIZACIÓN AUTOMÁTICA DE BASE DE DATOS (SOLO EN PRODUCCIÓN)
+    if app.config['FLASK_ENV'] == 'production':
+        with app.app_context():
+            try:
+                from database.setup import initialize_database
+                if initialize_database():
+                    print("🎉 Base de datos inicializada correctamente en producción")
+                else:
+                    print("⚠️ Advertencia: Hubo problemas con la inicialización de la base de datos")
+            except Exception as e:
+                print(f"❌ Error en inicialización de BD: {e}")
 
     api = Api(
         app,
@@ -58,27 +82,70 @@ def create_app():
     from routes.reports import api as reports_ns
     from routes.ml_routes import api as ml_ns
     from routes.forecast_routes import api as forecast_ns
-    from routes.ml_routes import api as ml_nsRecomendation
-  
 
     # Registrar Namespaces
-    api.add_namespace(products_ns, path="/products")
-    api.add_namespace(suppliers_ns, path="/suppliers")
-    api.add_namespace(sales_ns, path="/sales")
-    api.add_namespace(sale_details_ns, path="/sale-details")
-    api.add_namespace(movements_ns, path="/movements")
-    api.add_namespace(users_ns, path="/users")
-    api.add_namespace(auth_ns, path="/auth")
-    api.add_namespace(roles_ns, path="/roles")
-    api.add_namespace(dev_ns, path="/dev")
-    api.add_namespace(sales_report_ns, path="/sales-report")
-    api.add_namespace(reports_ns, path="/reports")
-    api.add_namespace(forecast_ns, path='/ml/forecast')
-    api.add_namespace(ml_nsRecomendation, path='/ml')
+    api.add_namespace(products_ns, path="/api/products")
+    api.add_namespace(suppliers_ns, path="/api/suppliers")
+    api.add_namespace(sales_ns, path="/api/sales")
+    api.add_namespace(sale_details_ns, path="/api/sale-details")
+    api.add_namespace(movements_ns, path="/api/movements")
+    api.add_namespace(users_ns, path="/api/users")
+    api.add_namespace(auth_ns, path="/api/auth")
+    api.add_namespace(roles_ns, path="/api/roles")
+    api.add_namespace(dev_ns, path="/api/dev")
+    api.add_namespace(sales_report_ns, path="/api/sales-report")
+    api.add_namespace(reports_ns, path="/api/reports")
+    api.add_namespace(forecast_ns, path='/api/ml/forecast')
+    api.add_namespace(ml_ns, path='/api/ml')
 
+    # 🔥 HEALTH CHECK endpoint para Render
+    @app.route('/health')
+    def health_check():
+        from database.setup import DatabaseSetup
+        setup = DatabaseSetup()
+        
+        db_status = "healthy" if setup.check_database_connection() else "unhealthy"
+        tables_status = "complete" if setup.verify_tables_structure() else "incomplete"
+        
+        return jsonify({
+            'status': 'healthy',
+            'service': 'pws-backend',
+            'database': db_status,
+            'tables': tables_status,
+            'environment': app.config['FLASK_ENV'],
+            'timestamp': datetime.now().isoformat()
+        })
+
+    # Endpoint para forzar reinicialización de BD (útil para debugging)
+    @app.route('/api/admin/init-db', methods=['POST'])
+    def init_db():
+        try:
+            from database.setup import initialize_database
+            success = initialize_database()
+            return jsonify({
+                'success': success,
+                'message': 'Base de datos inicializada correctamente' if success else 'Error inicializando base de datos'
+            })
+        except Exception as e:
+            return jsonify({
+                'success': False,
+                'message': f'Error: {str(e)}'
+            }), 500
+
+    # Manejo de errores global
+    @app.errorhandler(404)
+    def not_found(error):
+        return jsonify({'error': 'Endpoint no encontrado'}), 404
+
+    @app.errorhandler(500)
+    def internal_error(error):
+        return jsonify({'error': 'Error interno del servidor'}), 500
 
     return app
 
+app = create_app()
+
 if __name__ == "__main__":
-    app = create_app()
-    app.run(debug=True)
+    port = int(os.environ.get('PORT', 5000))
+    debug_mode = os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'
+    app.run(host='0.0.0.0', port=port, debug=debug_mode)
