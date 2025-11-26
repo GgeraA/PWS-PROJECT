@@ -31,10 +31,13 @@ def create_app():
     ]
     
     CORS(app, 
-         origins=allowed_origins, 
-         supports_credentials=True,
-         methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-         allow_headers=["Content-Type", "Authorization", "X-Requested-With"])
+     origins=allowed_origins,
+     supports_credentials=True,
+     methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+     allow_headers=["Content-Type", "Authorization", "X-Requested-With", "Accept"],
+     expose_headers=["Content-Type", "Authorization"],
+     max_age=600
+)
 
     # 👇 Inicializar Flask-Mail con la aplicación
     mail.init_app(app)
