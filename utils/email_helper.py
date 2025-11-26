@@ -23,7 +23,7 @@ def send_email(to_email, subject, body):
     try:
         # Crear mensaje CON CODIFICACIÓN UTF-8
         message = MIMEMultipart()
-        message["From"] = f"POS-ML System <{Config.MAIL_DEFAULT_SENDER}>"
+        message["From"] = f"System POS-ML <{Config.MAIL_DEFAULT_SENDER}>"
         message["To"] = to_email
         message["Subject"] = Header(subject, 'utf-8')  # 👈 CODIFICAR SUBJECT
         
