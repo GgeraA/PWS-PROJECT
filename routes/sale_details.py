@@ -55,3 +55,17 @@ class SaleDetailResource(Resource):
         if not success:
             api.abort(404, NOT_FOUND_MSG)
         return detail
+   
+    @staticmethod
+    def get_by_sale_id(sale_id):
+        """Obtener todos los detalles de una venta específica"""
+        conn = psycopg2.connect(**Config.DATABASE)
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT detail_id, sale_id, product_id, quantity, price, subtotal 
+            FROM sale_details 
+            WHERE sale_id = %s
+        """, (sale_id,))
+        rows = cur.fetchall()
+        conn.close()
+        return [SaleDetail(*row) for row in rows]

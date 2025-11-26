@@ -7,7 +7,7 @@ class Config:
     DATABASE = { 
         "database": "seguridad",  
         "user": "postgres", 
-        "password": "123456", 
+        "password": "1234", 
         "host": "localhost", 
         "port": 5432 
     }

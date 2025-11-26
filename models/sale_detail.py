@@ -11,6 +11,7 @@ class SaleDetail:
         self.price = price
         self.subtotal = subtotal
 
+
     # Obtener todos los detalles
     @staticmethod
     def get_all():
@@ -82,3 +83,17 @@ class SaleDetail:
         conn.commit()
         conn.close()
         return bool(row)
+    
+    # Obtener detalles por sale_id
+@staticmethod
+def get_by_sale_id(sale_id):
+    conn = psycopg2.connect(**Config.DATABASE)
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT Detail_ID, Sale_ID, Product_ID, Quantity, Price, Subtotal 
+        FROM Sale_Details 
+        WHERE Sale_ID = %s
+    """, (sale_id,))
+    rows = cur.fetchall()
+    conn.close()
+    return [SaleDetail(*row) for row in rows]

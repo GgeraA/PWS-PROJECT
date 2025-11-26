@@ -9,6 +9,7 @@ class Sale:
         self.user_id = user_id
         self.total = total
 
+
     # Obtener todas las ventas
     @staticmethod
     def get_all():
