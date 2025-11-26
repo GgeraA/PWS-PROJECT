@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 class RecommendationSystem:
     def __init__(self):
-        self.conn_params = Config.DATABASE
+        self.conn_params = Config.get_database_config()
 
     def _get_connection(self):
         """Obtener conexión a la base de datos"""

@@ -38,7 +38,7 @@ class User:
 
     @staticmethod
     def get_all():
-        conn = psycopg2.connect(**Config.DATABASE)
+        conn = psycopg2.connect(**Config.get_database_config())
         cur = conn.cursor()
         cur.execute("""
             SELECT id, nombre, email, password, rol, two_factor_enabled, 
@@ -52,7 +52,7 @@ class User:
 
     @staticmethod
     def find_by_id(user_id):
-        conn = psycopg2.connect(**Config.DATABASE)
+        conn = psycopg2.connect(**Config.get_database_config())
         cur = conn.cursor()
         cur.execute("""
             SELECT id, nombre, email, password, rol, two_factor_enabled, 
@@ -68,7 +68,7 @@ class User:
 
     @staticmethod
     def find_by_email(email):
-        conn = psycopg2.connect(**Config.DATABASE)
+        conn = psycopg2.connect(**Config.get_database_config())
         cur = conn.cursor()
         cur.execute("""
             SELECT id, nombre, email, password, rol, two_factor_enabled, 
@@ -83,7 +83,7 @@ class User:
         return None
 
     def save(self):
-        conn = psycopg2.connect(**Config.DATABASE)
+        conn = psycopg2.connect(**Config.get_database_config())
         cur = conn.cursor()
         try:
             cur.execute("""
@@ -105,7 +105,7 @@ class User:
             conn.close()
 
     def update(self):
-        conn = psycopg2.connect(**Config.DATABASE)
+        conn = psycopg2.connect(**Config.get_database_config())
         cur = conn.cursor()
         try:
             cur.execute("""
@@ -130,7 +130,7 @@ class User:
 
     @staticmethod
     def delete(user_id):
-        conn = psycopg2.connect(**Config.DATABASE)
+        conn = psycopg2.connect(**Config.get_database_config())
         cur = conn.cursor()
         cur.execute("DELETE FROM users WHERE id=%s RETURNING id", (user_id,))
         row = cur.fetchone()
@@ -144,7 +144,7 @@ class User:
         if new_role not in User.ALLOWED_ROLES:
             return False
             
-        conn = psycopg2.connect(**Config.DATABASE)
+        conn = psycopg2.connect(**Config.get_database_config())
         cur = conn.cursor()
         try:
             cur.execute("""
@@ -162,7 +162,7 @@ class User:
 
     @staticmethod
     def get_all_with_roles():
-        conn = psycopg2.connect(**Config.DATABASE)
+        conn = psycopg2.connect(**Config.get_database_config())
         cur = conn.cursor()
         cur.execute("""
             SELECT id, nombre, email, rol, created_at 
@@ -231,7 +231,7 @@ class User:
     def update_password(email, new_password):
         """Actualizar contraseña de usuario"""
         try:
-            conn = psycopg2.connect(**Config.DATABASE)
+            conn = psycopg2.connect(**Config.get_database_config())
             cur = conn.cursor()
         
             password_hash = User.hash_password(new_password)
@@ -250,4 +250,4 @@ class User:
             return bool(row)
         except Exception as e:
             print(f"❌ Error actualizando contraseña: {e}")
-            return False    
+            return False

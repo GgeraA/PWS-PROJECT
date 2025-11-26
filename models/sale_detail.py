@@ -11,30 +11,31 @@ class SaleDetail:
         self.price = price
         self.subtotal = subtotal
 
-
     # Obtener todos los detalles
     @staticmethod
     def get_all():
-        conn = psycopg2.connect(**Config.DATABASE)
+        conn = psycopg2.connect(**Config.get_database_config())
         cur = conn.cursor()
         cur.execute("SELECT Detail_ID, Sale_ID, Product_ID, Quantity, Price, Subtotal FROM Sale_Details ORDER BY Detail_ID")
         rows = cur.fetchall()
+        cur.close()
         conn.close()
         return [SaleDetail(*row) for row in rows]
 
     # Obtener un detalle por ID
     @staticmethod
     def get_by_id(detail_id):
-        conn = psycopg2.connect(**Config.DATABASE)
+        conn = psycopg2.connect(**Config.get_database_config())
         cur = conn.cursor()
         cur.execute("SELECT Detail_ID, Sale_ID, Product_ID, Quantity, Price, Subtotal FROM Sale_Details WHERE Detail_ID = %s", (detail_id,))
         row = cur.fetchone()
+        cur.close()
         conn.close()
         return SaleDetail(*row) if row else None
 
     # Crear un nuevo detalle
     def save(self):
-        conn = psycopg2.connect(**Config.DATABASE)
+        conn = psycopg2.connect(**Config.get_database_config())
         cur = conn.cursor()
         cur.execute(
             """
@@ -47,12 +48,13 @@ class SaleDetail:
         row = cur.fetchone()
         self.detail_id, self.subtotal = row
         conn.commit()
+        cur.close()
         conn.close()
         return self
 
     # Actualizar un detalle
     def update(self, data):
-        conn = psycopg2.connect(**Config.DATABASE)
+        conn = psycopg2.connect(**Config.get_database_config())
         cur = conn.cursor()
         cur.execute(
             """
@@ -70,30 +72,33 @@ class SaleDetail:
         )
         row = cur.fetchone()
         conn.commit()
+        cur.close()
         conn.close()
         return bool(row)
 
     # Eliminar un detalle
     @staticmethod
     def delete(detail_id):
-        conn = psycopg2.connect(**Config.DATABASE)
+        conn = psycopg2.connect(**Config.get_database_config())
         cur = conn.cursor()
         cur.execute("DELETE FROM Sale_Details WHERE Detail_ID = %s RETURNING Detail_ID", (detail_id,))
         row = cur.fetchone()
         conn.commit()
+        cur.close()
         conn.close()
         return bool(row)
     
     # Obtener detalles por sale_id
-@staticmethod
-def get_by_sale_id(sale_id):
-    conn = psycopg2.connect(**Config.DATABASE)
-    cur = conn.cursor()
-    cur.execute("""
-        SELECT Detail_ID, Sale_ID, Product_ID, Quantity, Price, Subtotal 
-        FROM Sale_Details 
-        WHERE Sale_ID = %s
-    """, (sale_id,))
-    rows = cur.fetchall()
-    conn.close()
-    return [SaleDetail(*row) for row in rows]
+    @staticmethod
+    def get_by_sale_id(sale_id):
+        conn = psycopg2.connect(**Config.get_database_config())
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT Detail_ID, Sale_ID, Product_ID, Quantity, Price, Subtotal 
+            FROM Sale_Details 
+            WHERE Sale_ID = %s
+        """, (sale_id,))
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+        return [SaleDetail(*row) for row in rows]

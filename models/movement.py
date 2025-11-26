@@ -19,7 +19,7 @@ class Movement:
     @staticmethod
     def get_all():
         """Devuelve todos los movimientos"""
-        conn = psycopg2.connect(**Config.DATABASE)
+        conn = psycopg2.connect(**Config.get_database_config())
         cur = conn.cursor()
         cur.execute("""
             SELECT Movement_ID, Date, Type, Product_ID, Quantity, Reference, Supplier_ID, User_ID
@@ -34,7 +34,7 @@ class Movement:
     @staticmethod
     def find_by_id(movement_id):
         """Busca movimiento por ID"""
-        conn = psycopg2.connect(**Config.DATABASE)
+        conn = psycopg2.connect(**Config.get_database_config())
         cur = conn.cursor()
         cur.execute("""
             SELECT Movement_ID, Date, Type, Product_ID, Quantity, Reference, Supplier_ID, User_ID
@@ -49,7 +49,7 @@ class Movement:
 
     def save(self):
         """Inserta un nuevo movimiento"""
-        conn = psycopg2.connect(**Config.DATABASE)
+        conn = psycopg2.connect(**Config.get_database_config())
         cur = conn.cursor()
         cur.execute("""
             INSERT INTO Movements (Type, Product_ID, Quantity, Reference, Supplier_ID, User_ID)
@@ -64,7 +64,7 @@ class Movement:
 
     def update(self):
         """Actualiza movimiento existente"""
-        conn = psycopg2.connect(**Config.DATABASE)
+        conn = psycopg2.connect(**Config.get_database_config())
         cur = conn.cursor()
         cur.execute("""
             UPDATE Movements
@@ -79,7 +79,7 @@ class Movement:
     @staticmethod
     def delete(movement_id):
         """Elimina movimiento por ID"""
-        conn = psycopg2.connect(**Config.DATABASE)
+        conn = psycopg2.connect(**Config.get_database_config())
         cur = conn.cursor()
         cur.execute("DELETE FROM Movements WHERE Movement_ID=%s RETURNING Movement_ID", (movement_id,))
         row = cur.fetchone()

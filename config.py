@@ -6,8 +6,8 @@ load_dotenv()
 
 class Config:
     # 🔥 CONFIGURACIÓN DINÁMICA PARA RENDER/PRODUCCIÓN
-    @property
-    def DATABASE(self):
+    @staticmethod
+    def get_database_config():
         database_url = os.getenv('DATABASE_URL')
         
         if database_url:
@@ -52,6 +52,3 @@ class Config:
     # Configuración de entorno
     FLASK_ENV = os.getenv("FLASK_ENV", "production")
     DEBUG = os.getenv("DEBUG", "False").lower() == "true"
-
-# Instancia global de configuración
-config = Config()

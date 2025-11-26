@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 
 class DatabaseSetup:
     def __init__(self):
-        self.conn_params = Config.DATABASE
+        self.conn_params = Config.get_database_config()
     
     def create_tables(self):
         """Crear todas las tablas EXACTAMENTE como las tienes localmente"""
@@ -168,6 +168,7 @@ class DatabaseSetup:
             cur = conn.cursor()
             cur.execute("SELECT version()")
             version = cur.fetchone()
+            cur.close()
             conn.close()
             logger.info(f"✅ Conexión a PostgreSQL exitosa: {version[0]}")
             return True

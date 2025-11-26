@@ -20,7 +20,7 @@ class UserSession:
         self.last_activity = last_activity
 
     def save(self):
-        conn = psycopg2.connect(**Config.DATABASE)
+        conn = psycopg2.connect(**Config.get_database_config())
         cur = conn.cursor()
         cur.execute("""
             INSERT INTO user_sessions 
@@ -36,7 +36,7 @@ class UserSession:
         return self.id
 
     def update(self):
-        conn = psycopg2.connect(**Config.DATABASE)
+        conn = psycopg2.connect(**Config.get_database_config())
         cur = conn.cursor()
         cur.execute("""
             UPDATE user_sessions 
@@ -50,7 +50,7 @@ class UserSession:
     @staticmethod
     def find_by_token(session_token):
         print(f"🔍 Buscando sesión con token: {session_token[:20]}...")  # DEBUG
-        conn = psycopg2.connect(**Config.DATABASE)
+        conn = psycopg2.connect(**Config.get_database_config())
         cur = conn.cursor()
         cur.execute("""
             SELECT id, user_id, session_token, created_at, expires_at, 
@@ -69,7 +69,7 @@ class UserSession:
 
     @staticmethod
     def find_active_by_user(user_id):
-        conn = psycopg2.connect(**Config.DATABASE)
+        conn = psycopg2.connect(**Config.get_database_config())
         cur = conn.cursor()
         cur.execute("""
             SELECT id, user_id, session_token, created_at, expires_at, 
@@ -87,7 +87,7 @@ class UserSession:
     def invalidate_session(session_token):
         """ELIMINA físicamente la sesión de la base de datos"""
         try:
-            conn = psycopg2.connect(**Config.DATABASE)
+            conn = psycopg2.connect(**Config.get_database_config())
             cur = conn.cursor()
             cur.execute("""
                 DELETE FROM user_sessions 
@@ -109,7 +109,7 @@ class UserSession:
     def invalidate_all_user_sessions(user_id):
         """Elimina TODAS las sesiones de un usuario"""
         try:
-            conn = psycopg2.connect(**Config.DATABASE)
+            conn = psycopg2.connect(**Config.get_database_config())
             cur = conn.cursor()
             cur.execute("""
                 DELETE FROM user_sessions 
@@ -129,7 +129,7 @@ class UserSession:
     @staticmethod
     def cleanup_expired():
         """Marcar como inactivas las sesiones expiradas"""
-        conn = psycopg2.connect(**Config.DATABASE)
+        conn = psycopg2.connect(**Config.get_database_config())
         cur = conn.cursor()
         cur.execute("""
             UPDATE user_sessions 
@@ -144,7 +144,7 @@ class UserSession:
     def cleanup_old_sessions(days_old=2):
         """Eliminar sesiones inactivas o expiradas más viejas de X días"""
         try:
-            conn = psycopg2.connect(**Config.DATABASE)
+            conn = psycopg2.connect(**Config.get_database_config())
             cur = conn.cursor()
             cur.execute("""
                 DELETE FROM user_sessions 
@@ -165,7 +165,7 @@ class UserSession:
     @staticmethod
     def refresh_session(session_token, extension_hours=24):
         """Renovar una sesión extendiendo su tiempo de expiración"""
-        conn = psycopg2.connect(**Config.DATABASE)
+        conn = psycopg2.connect(**Config.get_database_config())
         cur = conn.cursor()
         new_expires_at = datetime.now(tz=timezone.utc) + timedelta(hours=extension_hours)
         cur.execute("""
@@ -183,7 +183,7 @@ class UserSession:
     @staticmethod
     def update_last_activity(session_token):
         """Actualizar la última actividad de una sesión"""
-        conn = psycopg2.connect(**Config.DATABASE)
+        conn = psycopg2.connect(**Config.get_database_config())
         cur = conn.cursor()
         cur.execute("""
             UPDATE user_sessions 

@@ -28,7 +28,7 @@ class Product:
     @staticmethod
     def get_all():
         """Devuelve todos los productos"""
-        conn = psycopg2.connect(**Config.DATABASE)
+        conn = psycopg2.connect(**Config.get_database_config())
         cur = conn.cursor()
         cur.execute("""
             SELECT Product_ID, Code, Name, Description, Category, Unit, 
@@ -68,7 +68,7 @@ class Product:
     @staticmethod
     def find_by_id(product_id):
         """Busca producto por ID"""
-        conn = psycopg2.connect(**Config.DATABASE)
+        conn = psycopg2.connect(**Config.get_database_config())
         cur = conn.cursor()
         cur.execute("""
             SELECT Product_ID, Code, Name, Description, Category, Unit, 
@@ -103,7 +103,7 @@ class Product:
 
     def save(self):
         """Inserta un nuevo producto"""
-        conn = psycopg2.connect(**Config.DATABASE)
+        conn = psycopg2.connect(**Config.get_database_config())
         cur = conn.cursor()
         cur.execute("""
             INSERT INTO Products 
@@ -125,7 +125,7 @@ class Product:
 
     def update(self):
         """Actualiza producto existente"""
-        conn = psycopg2.connect(**Config.DATABASE)
+        conn = psycopg2.connect(**Config.get_database_config())
         cur = conn.cursor()
         cur.execute("""
             UPDATE Products
@@ -148,7 +148,7 @@ class Product:
     @staticmethod
     def delete(product_id):
         """Elimina producto por ID"""
-        conn = psycopg2.connect(**Config.DATABASE)
+        conn = psycopg2.connect(**Config.get_database_config())
         cur = conn.cursor()
         cur.execute("DELETE FROM Products WHERE Product_ID=%s RETURNING Product_ID", (product_id,))
         row = cur.fetchone()
