@@ -196,7 +196,7 @@ class DatabaseSetup:
                     VALUES (%s, %s, %s, %s)
                 """, (
                     "Administrador", 
-                    "admin@sistema.com", 
+                    "brayangonzalez030405@gmail.com", 
                     "$2b$12$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW",  # password: 'secret'
                     "admin"
                 ))
