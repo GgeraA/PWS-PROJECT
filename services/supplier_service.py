@@ -3,7 +3,7 @@ from config import Config
 from models.supplier import Supplier
 
 def get_all_suppliers():
-    conn = psycopg2.connect(**Config.DATABASE)
+    conn = psycopg2.connect(**Config.get_database_config())
     cur = conn.cursor()
     cur.execute("SELECT supplier_id, name, phone, contact, email, address FROM suppliers ORDER BY supplier_id")
     rows = cur.fetchall()
@@ -17,7 +17,7 @@ def get_all_suppliers():
     return suppliers
 
 def get_supplier(supplier_id):
-    conn = psycopg2.connect(**Config.DATABASE)
+    conn = psycopg2.connect(**Config.get_database_config())
     cur = conn.cursor()
     cur.execute("SELECT supplier_id, name, phone, contact, email, address FROM suppliers WHERE supplier_id = %s", (supplier_id,))
     row = cur.fetchone()
@@ -29,7 +29,7 @@ def get_supplier(supplier_id):
     return None
 
 def create_supplier(data):
-    conn = psycopg2.connect(**Config.DATABASE)
+    conn = psycopg2.connect(**Config.get_database_config())
     cur = conn.cursor()
     
     cur.execute(
@@ -52,7 +52,7 @@ def create_supplier(data):
     return get_supplier(supplier_id)
 
 def update_supplier(supplier_id, data):
-    conn = psycopg2.connect(**Config.DATABASE)
+    conn = psycopg2.connect(**Config.get_database_config())
     cur = conn.cursor()
     cur.execute(
         """
@@ -76,7 +76,7 @@ def update_supplier(supplier_id, data):
     return get_supplier(supplier_id) if row else None
 
 def delete_supplier(supplier_id):
-    conn = psycopg2.connect(**Config.DATABASE)
+    conn = psycopg2.connect(**Config.get_database_config())
     cur = conn.cursor()
     cur.execute("DELETE FROM suppliers WHERE supplier_id = %s RETURNING supplier_id", (supplier_id,))
     row = cur.fetchone()
