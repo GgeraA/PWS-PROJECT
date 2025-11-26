@@ -27,7 +27,7 @@ def create_app():
     allowed_origins = [
         "http://localhost:5173",
         "http://localhost:3000", 
-        "https://tu-frontend-en-render.onrender.com"  # ACTUALIZAR con tu URL real
+        "https://pos-frontend-13ys.onrender.com"  # ACTUALIZAR con tu URL real
     ]
     
     CORS(app, 
