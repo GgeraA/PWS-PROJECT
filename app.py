@@ -58,6 +58,8 @@ def create_app():
     from routes.reports import api as reports_ns
     from routes.ml_routes import api as ml_ns
     from routes.forecast_routes import api as forecast_ns
+    from routes.ml_routes import api as ml_nsRecomendation
+  
 
     # Registrar Namespaces
     api.add_namespace(products_ns, path="/products")
@@ -72,6 +74,8 @@ def create_app():
     api.add_namespace(sales_report_ns, path="/sales-report")
     api.add_namespace(reports_ns, path="/reports")
     api.add_namespace(forecast_ns, path='/ml/forecast')
+    api.add_namespace(ml_nsRecomendation, path='/ml')
+
 
     return app
 
