@@ -20,7 +20,7 @@ def get_db_connection():
         raise
 
 def get_sales_metrics(start_date=None, end_date=None):
-    """Obtener métricas generales de ventas"""
+    """Obtener métricas generales de ventas - CORREGIDO"""
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -32,7 +32,7 @@ def get_sales_metrics(start_date=None, end_date=None):
                 COUNT(*) as total_transacciones,
                 COALESCE(AVG(total), 0) as ticket_promedio,
                 COALESCE(SUM(
-                    SELECT COUNT(*) FROM sale_details WHERE sale_id = sales.id
+                    (SELECT COUNT(*) FROM sale_details WHERE sale_details.sale_id = sales.sale_id)
                 ), 0) as total_productos
             FROM sales
             WHERE 1=1
@@ -40,10 +40,10 @@ def get_sales_metrics(start_date=None, end_date=None):
         
         params = []
         if start_date:
-            query += " AND sale_date >= %s"
+            query += " AND date >= %s"
             params.append(start_date)
         if end_date:
-            query += " AND sale_date <= %s"
+            query += " AND date <= %s"
             params.append(end_date)
             
         cursor.execute(query, params)
@@ -69,7 +69,7 @@ def get_sales_metrics(start_date=None, end_date=None):
         }
 
 def get_sales_trend(start_date=None, end_date=None):
-    """Obtener tendencia de ventas por día"""
+    """Obtener tendencia de ventas por día - CORREGIDO"""
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -81,13 +81,13 @@ def get_sales_trend(start_date=None, end_date=None):
         
         query = """
             SELECT 
-                sale_date as fecha,
+                DATE(date) as fecha,
                 COALESCE(SUM(total), 0) as ventas,
                 COUNT(*) as cantidad
             FROM sales
-            WHERE sale_date BETWEEN %s AND %s
-            GROUP BY sale_date
-            ORDER BY sale_date
+            WHERE DATE(date) BETWEEN %s AND %s
+            GROUP BY DATE(date)
+            ORDER BY DATE(date)
         """
         
         cursor.execute(query, (start_date, end_date))
@@ -110,20 +110,19 @@ def get_sales_trend(start_date=None, end_date=None):
         return []
 
 def get_sales_by_category():
-    """Obtener ventas por categoría"""
+    """Obtener ventas por categoría - CORREGIDO"""
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
         
         query = """
             SELECT 
-                c.name as nombre,
+                p.category as nombre,
                 COALESCE(SUM(sd.subtotal), 0) as valor,
                 COALESCE(SUM(sd.quantity), 0) as cantidad
-            FROM categories c
-            LEFT JOIN products p ON c.id = p.category_id
-            LEFT JOIN sale_details sd ON p.id = sd.product_id
-            GROUP BY c.id, c.name
+            FROM products p
+            LEFT JOIN sale_details sd ON p.product_id = sd.product_id
+            GROUP BY p.category
             ORDER BY valor DESC
         """
         
@@ -135,7 +134,7 @@ def get_sales_by_category():
         
         return [
             {
-                "nombre": row[0],
+                "nombre": row[0] or "Sin categoría",
                 "valor": float(row[1]),
                 "cantidad": row[2]
             }
@@ -147,7 +146,7 @@ def get_sales_by_category():
         return []
 
 def get_top_products(limit=5):
-    """Obtener productos más vendidos"""
+    """Obtener productos más vendidos - CORREGIDO"""
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -158,8 +157,8 @@ def get_top_products(limit=5):
                 COALESCE(SUM(sd.subtotal), 0) as ventas,
                 COALESCE(SUM(sd.quantity), 0) as cantidad
             FROM products p
-            LEFT JOIN sale_details sd ON p.id = sd.product_id
-            GROUP BY p.id, p.name
+            LEFT JOIN sale_details sd ON p.product_id = sd.product_id
+            GROUP BY p.product_id, p.name
             ORDER BY cantidad DESC, ventas DESC
             LIMIT %s
         """
