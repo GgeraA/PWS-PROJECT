@@ -1,5 +1,5 @@
 import os
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -62,34 +62,6 @@ def create_app():
         ],
         max_age=600
     )
-
-    # 👇 Middleware para bypass de advertencias (similar a Express)
-    @app.after_request
-    def after_request(response):
-        # Bypass para ngrok y otras herramientas
-        response.headers.add('ngrok-skip-browser-warning', 'true')
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
-        
-        # Headers adicionales para compatibilidad
-        response.headers.add('X-Content-Type-Options', 'nosniff')
-        response.headers.add('X-Frame-Options', 'DENY')
-        response.headers.add('X-XSS-Protection', '1; mode=block')
-        
-        return response
-
-    # 👇 Manejar preflight requests explícitamente
-    @app.before_request
-    def handle_preflight():
-        if request.method == "OPTIONS":
-            response = jsonify({"status": "preflight"})
-            response.headers.add("Access-Control-Allow-Origin", 
-                               request.headers.get("Origin", "*"))
-            response.headers.add("Access-Control-Allow-Headers", 
-                               "Content-Type, Authorization, X-Requested-With, Accept")
-            response.headers.add("Access-Control-Allow-Methods", 
-                               "GET, POST, PUT, DELETE, OPTIONS, PATCH")
-            response.headers.add("Access-Control-Allow-Credentials", "true")
-            return response
 
     # 👇 Inicializar Flask-Mail con la aplicación
     mail.init_app(app)
@@ -155,7 +127,7 @@ def create_app():
     #api.add_namespace(ml_ns, path='/ml')
     api.add_namespace(ml_nsRecomendation, path='/ml')
 
-    # 🔥 HEALTH CHECK endpoint para Render (MEJORADO)
+    # 🔥 HEALTH CHECK endpoint para Render
     @app.route('/health')
     def health_check():
         from database.setup import DatabaseSetup
@@ -170,32 +142,12 @@ def create_app():
             'database': db_status,
             'tables': tables_status,
             'environment': app.config['FLASK_ENV'],
-            'timestamp': datetime.now().isoformat(),
-            'cors_enabled': True,
-            'allowed_origins': allowed_origins
-        })
-
-    # 🔥 ENDPOINT RAIZ (similar a Express) - CON NOMBRE ÚNICO
-    @app.route('/')
-    def root_endpoint():
-        return jsonify({
-            'message': 'PWS Project API - Backend funcionando',
-            'version': '1.0.0',
-            'timestamp': datetime.now().isoformat(),
-            'endpoints': {
-                'health': '/health',
-                'documentation': '/docs',
-                'products': '/products',
-                'sales': '/sales',
-                'users': '/users',
-                'auth': '/auth',
-                'reports': '/reports'
-            }
+            'timestamp': datetime.now().isoformat()
         })
 
     # Endpoint para forzar reinicialización de BD (útil para debugging)
     @app.route('/api/admin/init-db', methods=['POST'])
-    def init_db_endpoint():
+    def init_db():
         try:
             from database.setup import initialize_database
             success = initialize_database()
@@ -209,33 +161,14 @@ def create_app():
                 'message': f'Error: {str(e)}'
             }), 500
 
-    # Manejo de errores global (MEJORADO)
+    # Manejo de errores global
     @app.errorhandler(404)
-    def not_found_error(error):
-        return jsonify({
-            'success': False,
-            'message': 'Endpoint no encontrado',
-            'path': request.path,
-            'method': request.method,
-            'suggestion': 'Verifica que la URL sea correcta'
-        }), 404
+    def not_found(error):
+        return jsonify({'error': 'Endpoint no encontrado'}), 404
 
     @app.errorhandler(500)
-    def internal_server_error(error):
-        return jsonify({
-            'success': False,
-            'message': 'Error interno del servidor',
-            'error': 'Error interno' if app.config['ENV'] == 'production' else str(error)
-        }), 500
-
-    # Manejo de errores CORS
-    @app.errorhandler(405)
-    def method_not_allowed_error(error):
-        return jsonify({
-            'success': False,
-            'message': 'Método no permitido',
-            'allowed_methods': ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH']
-        }), 405
+    def internal_error(error):
+        return jsonify({'error': 'Error interno del servidor'}), 500
 
     return app
 
@@ -244,16 +177,4 @@ app = create_app()
 if __name__ == "__main__":
     port = int(os.environ.get('PORT', 5000))
     debug_mode = os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'
-    
-    print('🚀 ===============================================')
-    print('🚀 PWS Project API - Servidor Flask iniciado')
-    print('🚀 ===============================================')
-    print(f'📊 Puerto: {port}')
-    print(f'🌐 URL: http://localhost:{port}')
-    print(f'🔗 Health Check: http://localhost:{port}/health')
-    print(f'📚 Documentación: http://localhost:{port}/docs')
-    print(f'🌍 CORS habilitado para múltiples orígenes')
-    print(f'📝 Entorno: {os.environ.get("FLASK_ENV", "development")}')
-    print('🚀 ===============================================')
-    
     app.run(host='0.0.0.0', port=port, debug=debug_mode)
