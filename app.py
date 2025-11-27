@@ -1,5 +1,5 @@
 import os
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -175,9 +175,9 @@ def create_app():
             'allowed_origins': allowed_origins
         })
 
-    # 🔥 ENDPOINT RAIZ (similar a Express)
+    # 🔥 ENDPOINT RAIZ (similar a Express) - CON NOMBRE ÚNICO
     @app.route('/')
-    def root():
+    def root_endpoint():
         return jsonify({
             'message': 'PWS Project API - Backend funcionando',
             'version': '1.0.0',
@@ -195,7 +195,7 @@ def create_app():
 
     # Endpoint para forzar reinicialización de BD (útil para debugging)
     @app.route('/api/admin/init-db', methods=['POST'])
-    def init_db():
+    def init_db_endpoint():
         try:
             from database.setup import initialize_database
             success = initialize_database()
@@ -211,7 +211,7 @@ def create_app():
 
     # Manejo de errores global (MEJORADO)
     @app.errorhandler(404)
-    def not_found(error):
+    def not_found_error(error):
         return jsonify({
             'success': False,
             'message': 'Endpoint no encontrado',
@@ -221,7 +221,7 @@ def create_app():
         }), 404
 
     @app.errorhandler(500)
-    def internal_error(error):
+    def internal_server_error(error):
         return jsonify({
             'success': False,
             'message': 'Error interno del servidor',
@@ -230,7 +230,7 @@ def create_app():
 
     # Manejo de errores CORS
     @app.errorhandler(405)
-    def method_not_allowed(error):
+    def method_not_allowed_error(error):
         return jsonify({
             'success': False,
             'message': 'Método no permitido',
@@ -252,7 +252,7 @@ if __name__ == "__main__":
     print(f'🌐 URL: http://localhost:{port}')
     print(f'🔗 Health Check: http://localhost:{port}/health')
     print(f'📚 Documentación: http://localhost:{port}/docs')
-    print(f'🌍 CORS habilitado para: {len(allowed_origins)} orígenes')
+    print(f'🌍 CORS habilitado para múltiples orígenes')
     print(f'📝 Entorno: {os.environ.get("FLASK_ENV", "development")}')
     print('🚀 ===============================================')
     
