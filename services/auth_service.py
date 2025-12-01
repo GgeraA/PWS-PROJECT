@@ -152,63 +152,63 @@ class AuthService:
             "session_count": len(active_sessions)
         }, 409
 
-@staticmethod
-def _create_session(user, client_info):
-    ip_address = client_info.get('ip_address')
-    user_agent = client_info.get('user_agent', '')[:500]
-    location_data = client_info.get('location_data', {})
-    location_str = json.dumps(location_data if location_data else {"error": "No location data"})
+    @staticmethod
+    def _create_session(user, client_info):
+        ip_address = client_info.get('ip_address')
+        user_agent = client_info.get('user_agent', '')[:500]
+        location_data = client_info.get('location_data', {})
+        location_str = json.dumps(location_data if location_data else {"error": "No location data"})
 
-    # Obtener tiempo actual UTC
-    now_utc = datetime.datetime.now(datetime.timezone.utc)
-    expiration_time = now_utc + datetime.timedelta(hours=AuthService.SESSION_DURATION_HOURS)
-    
-    # Crear payload con datetime objects, no timestamp
-    payload = {
-        "user_id": user.id,
-        "email": user.email,
-        "rol": getattr(user, 'rol', None),
-        "exp": expiration_time,
-        "iat": now_utc
-    }
-    
-    # Generar token JWT - FORMA CORRECTA
-    try:
-        token = jwt.encode(
-            payload,
-            Config.SECRET_KEY,
-            algorithm="HS256"
+        # Obtener tiempo actual UTC
+        now_utc = datetime.datetime.now(datetime.timezone.utc)
+        expiration_time = now_utc + datetime.timedelta(hours=AuthService.SESSION_DURATION_HOURS)
+        
+        # Crear payload con datetime objects, no timestamp
+        payload = {
+            "user_id": user.id,
+            "email": user.email,
+            "rol": getattr(user, 'rol', None),
+            "exp": expiration_time,
+            "iat": now_utc
+        }
+        
+        # Generar token JWT - FORMA CORRECTA
+        try:
+            token = jwt.encode(
+                payload,
+                Config.SECRET_KEY,
+                algorithm="HS256"
+            )
+            
+            # Asegurar que token sea string (PyJWT 2.x devuelve string, versiones antiguas bytes)
+            if isinstance(token, bytes):
+                token = token.decode('utf-8')
+                
+        except Exception as e:
+            log_event("JWT_GENERATION", user.email, "ERROR", f"Error generando token: {str(e)}")
+            raise ValueError(f"Error generando token JWT: {str(e)}")
+
+        expires_at = expiration_time
+
+        session = UserSession(
+            user_id=user.id,
+            session_token=token,
+            created_at=now_utc,
+            expires_at=expires_at,
+            is_active=True,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            location_data=location_str,
+            last_activity=now_utc
         )
         
-        # Asegurar que token sea string (PyJWT 2.x devuelve string, versiones antiguas bytes)
-        if isinstance(token, bytes):
-            token = token.decode('utf-8')
-            
-    except Exception as e:
-        log_event("JWT_GENERATION", user.email, "ERROR", f"Error generando token: {str(e)}")
-        raise ValueError(f"Error generando token JWT: {str(e)}")
-
-    expires_at = expiration_time
-
-    session = UserSession(
-        user_id=user.id,
-        session_token=token,
-        created_at=now_utc,
-        expires_at=expires_at,
-        is_active=True,
-        ip_address=ip_address,
-        user_agent=user_agent,
-        location_data=location_str,
-        last_activity=now_utc
-    )
-    
-    try:
-        session.save()
-    except Exception as e:
-        log_event("SESSION_SAVE", user.email, "ERROR", f"Error guardando sesión: {str(e)}")
-        raise ValueError(f"Error guardando sesión: {str(e)}")
-    
-    return token, expires_at, ip_address, location_data
+        try:
+            session.save()
+        except Exception as e:
+            log_event("SESSION_SAVE", user.email, "ERROR", f"Error guardando sesión: {str(e)}")
+            raise ValueError(f"Error guardando sesión: {str(e)}")
+        
+        return token, expires_at, ip_address, location_data
     @staticmethod
     def login(email, password, client_info=None):
         start = time.time()
