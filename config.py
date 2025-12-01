@@ -11,22 +11,19 @@ class Config:
         database_url = os.getenv('DATABASE_URL')
         
         if database_url:
-            # Render usa PostgreSQL - convertir formato si es necesario
             if database_url.startswith('postgres://'):
                 database_url = database_url.replace('postgres://', 'postgresql://', 1)
             
-            # Parsear la URL para obtener componentes individuales
             parsed = urllib.parse.urlparse(database_url)
             
             return {
                 'host': parsed.hostname,
                 'port': parsed.port or 5432,
-                'database': parsed.path[1:],  # Remover el '/' inicial
+                'database': parsed.path[1:],
                 'user': parsed.username,
                 'password': parsed.password
             }
         else:
-            # Configuración local de desarrollo
             return {
                 'database': 'seguridad',  
                 'user': 'postgres', 
@@ -35,9 +32,12 @@ class Config:
                 'port': 5432 
             }
     
+    # 🔥 AGREGAR PARA COMPATIBILIDAD CON CÓDIGO EXISTENTE
+    DATABASE = get_database_config.__func__()
+    
     # Seguridad
     SECRET_KEY = os.getenv("SECRET_KEY", "fallback-secret-key-for-development-only")
-    JWT_EXP_DELTA_SECONDS = int(os.getenv("JWT_EXP_DELTA_SECONDS", 300))  # 5 minutos
+    JWT_EXP_DELTA_SECONDS = int(os.getenv("JWT_EXP_DELTA_SECONDS", 300))
 
     # Configuración de Email
     MAIL_SERVER = os.getenv("MAIL_SERVER", "smtp-relay.brevo.com")
