@@ -1,3 +1,4 @@
+import email
 import secrets
 import time
 import jwt
@@ -494,91 +495,178 @@ class AuthService:
             log_event("RECOVER_USER", email, "ERROR", str(e))
             return {"error": "Error interno del servidor"}, 500
 
+
     @staticmethod
     def recover_password(email):
-        """Recuperar contraseña - CON DEBUG DETALLADO"""
+        """Recuperar contraseña usando Resend API como primario"""
         try:
-            print(f"🔍 RECOVER_PASSWORD INICIADO para: {email}")
+            print(f"🔍 RECOVER_PASSWORD para: {email}")
             
             # 1. Buscar usuario
             user = User.find_by_email(email)
             if not user:
-                print(f"⚠️ Usuario no encontrado: {email}")
+                # Por seguridad, no revelar si el email existe o no
+                print(f"⚠️ Email no encontrado (por seguridad): {email}")
                 return {"message": "Si el email existe, se enviarán instrucciones"}, 200
             
             print(f"✅ Usuario encontrado: {user.nombre}")
             
-            # 2. Generar token
-            token = secrets.token_urlsafe(32)
-            print(f"🔑 Token generado: {token}")
+            # 2. Generar token seguro
+            token = secrets.token_urlsafe(64)
+            print(f"🔑 Token generado (primeros 10 chars): {token[:10]}...")
             
-            # 3. Guardar en BD
+            # 3. Guardar en BD con expiración
             expira_en = datetime.datetime.now() + datetime.timedelta(minutes=30)
             
             conn = psycopg2.connect(**Config.DATABASE)
             cur = conn.cursor()
+            
+            # Limpiar tokens previos para este email
+            cur.execute("DELETE FROM password_resets WHERE email = %s", (email,))
+            
+            # Insertar nuevo token
             cur.execute(
-                "INSERT INTO password_resets (email, token, expira_en) VALUES (%s, %s, %s)",
+                """INSERT INTO password_resets (email, token, expira_en, created_at) 
+                VALUES (%s, %s, %s, NOW())""",
                 (email, token, expira_en)
             )
             conn.commit()
             cur.close()
             conn.close()
             
-            print(f"✅ Token guardado en BD para: {email}")
+            print(f"✅ Token guardado en BD")
             
-            # 4. ✅ VERIFICAR CONFIGURACIÓN DE EMAIL PRIMERO
-            print(f"📧 Configuración email:")
-            print(f"   - Servidor: {Config.MAIL_SERVER}")
-            print(f"   - Puerto: {Config.MAIL_PORT}")
-            print(f"   - Usuario: {Config.MAIL_USERNAME}")
-            print(f"   - Password: {'✅ Configurada' if Config.MAIL_PASSWORD else '❌ Faltante'}")
-            print(f"   - Remitente: {Config.MAIL_DEFAULT_SENDER}")
+            # 4. Crear enlace de reset
+            # IMPORTANTE: Cambia esto a tu dominio real en producción
+            frontend_url = os.getenv('FRONTEND_URL', 'https://pos-frontend-13ys.onrender.com')
+            reset_link = f"{frontend_url}/reset-password?token={token}"
             
-            # 5. ✅ ENVIAR EMAIL INMEDIATAMENTE (sin background para debug)
-            print(f"📧 Enviando email INMEDIATO a: {email}")
+            # 5. Preparar contenido del email
+            subject = "🔐 Recuperación de Contraseña - POS-ML"
             
-            reset_link = f"https://pos-frontend-13ys.onrender.com/reset-password?token={token}"
-            subject = "Recuperación de Contraseña - POS-ML"
-            body = f"""
-            Hola {user.nombre},
-
-            Has solicitado recuperar tu contraseña.
-
-            Usa este enlace: {reset_link}
-
-            Expira en 30 minutos.
-
-            Saludos,
-            Equipo POS-ML
+            html_content = f"""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="UTF-8">
+                <style>
+                    body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+                    .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+                    .header {{ background: #2563eb; color: white; padding: 20px; text-align: center; }}
+                    .content {{ background: #f9f9f9; padding: 30px; border-radius: 8px; margin: 20px 0; }}
+                    .button {{ display: inline-block; background: #2563eb; color: white; 
+                            padding: 12px 24px; text-decoration: none; border-radius: 5px; 
+                            font-weight: bold; margin: 15px 0; }}
+                    .footer {{ text-align: center; color: #666; font-size: 12px; margin-top: 30px; }}
+                    .token-info {{ background: #eee; padding: 10px; border-radius: 5px; 
+                                font-family: monospace; word-break: break-all; margin: 10px 0; }}
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <div class="header">
+                        <h1>🔐 POS-ML System</h1>
+                    </div>
+                    
+                    <div class="content">
+                        <h2>Hola {user.nombre},</h2>
+                        <p>Has solicitado recuperar tu contraseña en <strong>POS-ML System</strong>.</p>
+                        
+                        <p><strong>⚡ Haz clic en el botón para restablecer tu contraseña:</strong></p>
+                        
+                        <p style="text-align: center;">
+                            <a href="{reset_link}" class="button">Restablecer Contraseña</a>
+                        </p>
+                        
+                        <p>O copia y pega este enlace en tu navegador:</p>
+                        <div class="token-info">{reset_link}</div>
+                        
+                        <p><strong>⚠️ IMPORTANTE:</strong></p>
+                        <ul>
+                            <li>Este enlace expirará en <strong>30 minutos</strong></li>
+                            <li>Solo puede ser usado <strong>una vez</strong></li>
+                            <li>Si no solicitaste este cambio, ignora este mensaje</li>
+                        </ul>
+                        
+                        <p>Si tienes problemas con el botón, copia manualmente el enlace de arriba.</p>
+                    </div>
+                    
+                    <div class="footer">
+                        <p>Este es un email automático. Por favor no responder.</p>
+                        <p>© {datetime.datetime.now().year} POS-ML System. Todos los derechos reservados.</p>
+                    </div>
+                </div>
+            </body>
+            </html>
             """
             
-            # 6. ✅ LLAMAR DIRECTAMENTE send_email y mostrar resultado
+            text_content = f"""
+            Recuperación de Contraseña - POS-ML
+            
+            Hola {user.nombre},
+            
+            Has solicitado recuperar tu contraseña en POS-ML System.
+            
+            ⚡ Usa este enlace para restablecer tu contraseña:
+            {reset_link}
+            
+            ⏰ Este enlace expirará en 30 minutos.
+            🔒 Solo puede ser usado una vez.
+            
+            ⚠️ Si no solicitaste este cambio, por favor ignora este mensaje.
+            
+            Saludos,
+            Equipo POS-ML
+            📧 Sistema Automático
+            """
+            
+            # 6. Usar el email_helper unificado
             from utils.email_helper import send_email
-            result = send_email(email, subject, body)
             
-            print(f"📨 RESULTADO send_email:")
-            print(f"   - Status: {result.get('status')}")
-            print(f"   - Error: {result.get('error', 'Ninguno')}")
-            print(f"   - Latency: {result.get('latency', 0)}s")
+            result = send_email(
+                to_email=email,
+                subject=subject,
+                body=text_content
+            )
             
-            if result.get("status") == "error":
-                print(f"❌ ERROR ENVIANDO EMAIL: {result.get('error')}")
-                # Intentar fallback simple
-                return AuthService._send_email_fallback(email, user.nombre, token)
-            
-            print(f"✅ Email aparentemente enviado a {email}")
-            log_event("RECOVER_PASSWORD", email, "SUCCESS", f"Email enviado: {result.get('latency', 0)}s")
-            
-            return {"message": "Enlace de recuperación enviado a tu correo electrónico"}, 200
-            
+            if result.get("status") == "success":
+                provider = result.get("provider", "unknown")
+                print(f"✅ Email enviado exitosamente con {provider}")
+                log_event("RECOVER_PASSWORD", email, "SUCCESS", 
+                        f"Provider: {provider}, ID: {result.get('id', 'N/A')}")
+                
+                return {
+                    "message": "Enlace de recuperación enviado a tu correo electrónico",
+                    "email_sent": True,
+                    "provider": provider
+                }, 200
+            else:
+                print(f"❌ Todos los métodos de email fallaron")
+                log_event("RECOVER_PASSWORD", email, "ERROR", 
+                        f"Falló: {result.get('error', 'Unknown error')}")
+                
+                # Para desarrollo, mostrar el enlace
+                if Config.FLASK_ENV == 'development':
+                    return {
+                        "message": "En desarrollo: Usa este enlace para resetear",
+                        "reset_link": reset_link,
+                        "token": token,
+                        "note": "En producción se enviaría por email automáticamente",
+                        "email_sent": False
+                    }, 200
+                else:
+                    return {
+                        "message": "Procesado. Si no recibes el email, contacta soporte."
+                    }, 200
+                
         except Exception as e:
-            print(f"❌ ERROR CRÍTICO en recover_password: {type(e).__name__}: {str(e)}")
+            print(f"❌ ERROR en recover_password: {type(e).__name__}: {str(e)}")
             import traceback
             traceback.print_exc()
             
             log_event("RECOVER_PASSWORD", email, "ERROR", str(e))
-        return {"message": "Solicitud procesada. Si no recibes email, contacta al administrador."}, 200
+            return {"message": "Solicitud procesada."}, 200
+
 
     @staticmethod
     def _send_email_fallback(email, nombre, token):

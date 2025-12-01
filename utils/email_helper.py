@@ -1,110 +1,66 @@
-import smtplib
-import time
-import socket
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-from email.header import Header
-from config import Config  # ✅ ¡AGREGAR ESTA LÍNEA!
+# utils/email_helper.py
+import os
 import logging
+from config import Config
 
 logger = logging.getLogger(__name__)
 
 def send_email(to_email, subject, body):
     """
-    Envía correo usando SMTP - CORREGIDO
+    Envía email usando Resend como primera opción, con fallback a Flask-Mail
     """
-    start = time.time()
-    
-    print(f"📧 SEND_EMAIL INICIADO para: {to_email}")
-    
+    # INTENTAR CON RESEND PRIMERO (funciona en Render)
     try:
-        # 1. VERIFICAR CONFIGURACIÓN
-        print(f"🔧 Verificando configuración email...")
+        print(f"📧 Intentando enviar email con Resend a: {to_email}")
         
-        # Verificar cada configuración requerida
-        required_configs = {
-            'MAIL_SERVER': Config.MAIL_SERVER,
-            'MAIL_PORT': Config.MAIL_PORT,
-            'MAIL_USERNAME': Config.MAIL_USERNAME,
-            'MAIL_PASSWORD': Config.MAIL_PASSWORD,
-            'MAIL_DEFAULT_SENDER': Config.MAIL_DEFAULT_SENDER
-        }
+        from utils.email_resend import send_email_resend
+        result = send_email_resend(to_email, subject, body)
         
-        for key, value in required_configs.items():
-            if not value:
-                error_msg = f"❌ Configuración faltante: {key}"
-                print(error_msg)
-                return {"status": "error", "error": error_msg, "latency": 0}
-            else:
-                masked_value = "****" if "PASSWORD" in key else value
-                print(f"   ✅ {key}: {masked_value}")
+        if result.get("status") == "success":
+            print(f"✅ Resend exitoso! Latencia: {result.get('latency')}s")
+            return result
         
-        # 2. CONFIGURAR TIMEOUT
-        socket.setdefaulttimeout(15)
+        print(f"⚠️ Resend falló, intentando con Brevo...")
         
-        # 3. CREAR MENSAJE
-        message = MIMEMultipart()
-        message["From"] = f"POS-ML System <{Config.MAIL_DEFAULT_SENDER}>"
-        message["To"] = to_email
-        message["Subject"] = Header(subject, 'utf-8')
-        message.attach(MIMEText(body, "plain", "utf-8"))
-        
-        print(f"🔧 Conectando a {Config.MAIL_SERVER}:{Config.MAIL_PORT}...")
-        
-        # 4. CONEXIÓN SMTP
-        server = smtplib.SMTP(Config.MAIL_SERVER, Config.MAIL_PORT, timeout=15)
-        
-        try:
-            print(f"🔧 Iniciando handshake SMTP...")
-            server.ehlo()
-            
-            print(f"🔧 Activando TLS...")
-            server.starttls()
-            
-            print(f"🔧 Handshake TLS...")
-            server.ehlo()
-            
-            print(f"🔧 Autenticando como {Config.MAIL_USERNAME}...")
-            server.login(Config.MAIL_USERNAME, Config.MAIL_PASSWORD)
-            
-            print(f"🔧 Enviando mensaje...")
-            server.sendmail(
-                Config.MAIL_DEFAULT_SENDER,
-                to_email,
-                message.as_string()
-            )
-            
-            latency = round(time.time() - start, 3)
-            success_msg = f"✅ Email ENVIADO a {to_email} en {latency}s"
-            print(success_msg)
-            
-            return {"status": "success", "latency": latency}
-            
-        except smtplib.SMTPAuthenticationError as e:
-            error_msg = f"❌ Error autenticación SMTP: {str(e)}"
-            print(error_msg)
-            return {"status": "error", "error": "Error de autenticación", "latency": round(time.time() - start, 3)}
-            
-        except smtplib.SMTPException as e:
-            error_msg = f"❌ Error SMTP: {str(e)}"
-            print(error_msg)
-            return {"status": "error", "error": f"Error SMTP: {str(e)}", "latency": round(time.time() - start, 3)}
-            
-        finally:
-            try:
-                server.quit()
-                print(f"🔧 Conexión cerrada")
-            except:
-                pass
-                
-    except socket.timeout:
-        error_msg = "❌ Timeout conectando al servidor SMTP (15s)"
-        print(error_msg)
-        return {"status": "error", "error": error_msg, "latency": round(time.time() - start, 3)}
-        
+    except ImportError:
+        print("📦 Resend no está instalado. Usando Brevo...")
     except Exception as e:
-        error_msg = f"❌ Error inesperado: {type(e).__name__}: {str(e)}"
+        print(f"⚠️ Error con Resend: {e}")
+
+    # FALLBACK A BREVO/FLASK-MAIL (solo para desarrollo local)
+    try:
+        # Solo usar Brevo si estamos en desarrollo local
+        if Config.FLASK_ENV == 'development' and not os.getenv('RENDER'):
+            print(f"🔧 Modo desarrollo: usando Brevo para {to_email}")
+            
+            from flask_mail import Message
+            from app import mail
+            
+            msg = Message(
+                subject=subject,
+                sender=Config.MAIL_DEFAULT_SENDER,
+                recipients=[to_email]
+            )
+            msg.body = body
+            msg.html = f"""
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <h2 style="color: #2563eb;">POS-ML System</h2>
+                <div style="background: #f3f4f6; padding: 20px; border-radius: 8px;">
+                    <h3>{subject}</h3>
+                    <pre style="white-space: pre-wrap; font-family: monospace;">{body}</pre>
+                </div>
+                <p style="color: #6b7280; font-size: 12px; margin-top: 20px;">
+                    Este es un email automático. Por favor no responder.
+                </p>
+            </div>
+            """
+            
+            mail.send(msg)
+            return {"status": "success", "provider": "brevo", "note": "Desarrollo local"}
+        else:
+            return {"status": "error", "error": "No se pudo enviar email. Configura Resend para producción."}
+            
+    except Exception as e:
+        error_msg = f"❌ Ambos métodos fallaron: {str(e)}"
         print(error_msg)
-        import traceback
-        traceback.print_exc()
-        return {"status": "error", "error": f"Error: {str(e)}", "latency": round(time.time() - start, 3)}
+        return {"status": "error", "error": error_msg}
