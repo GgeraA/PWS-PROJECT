@@ -3,6 +3,7 @@ import os
 import logging
 from datetime import datetime, timedelta
 from config import Config
+from werkzeug.security import generate_password_hash  # ✅ IMPORTAR para hashes modernos
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -178,7 +179,7 @@ class DatabaseSetup:
             return False
     
     def initialize_sample_data(self):
-        """Insertar datos EXACTAMENTE como los tienes localmente"""
+        """Insertar datos EXACTAMENTE como los tienes localmente CON HASHES MODERNOS"""
         conn = None
         try:
             conn = psycopg2.connect(**self.conn_params)
@@ -189,21 +190,36 @@ class DatabaseSetup:
             user_count = cur.fetchone()[0]
             
             if user_count == 0:
-                logger.info("📝 Insertando datos EXACTOS de tu base local...")
+                logger.info("📝 Insertando datos EXACTOS con hashes MODERNOS...")
                 
-                # 1. Insertar usuarios (manteniendo el que ya tienes)
+                # ✅ GENERAR HASHES MODERNOS CON scrypt
+                password_hashes = []
+                for _ in range(4):  # Para 4 usuarios
+                    # Contraseña: "secret" - generada con scrypt
+                    hash_obj = generate_password_hash(
+                        'secret', 
+                        method='scrypt',      # ✅ MÉTODO MODERNO
+                        salt_length=16
+                    )
+                    password_hashes.append(hash_obj)
+                
+                # 1. Insertar usuarios con HASHES MODERNOS
                 users = [
-                    ('Administrador Principal', 'brayangonzalez030405@gmail.com', '$2b$12$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW', 'admin'),
-                    ('Carlos Mendoza', 'carlos.mendoza@empresa.com', '$2b$12$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW', 'usuario'),
-                    ('Ana García', 'ana.garcia@empresa.com', '$2b$12$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW', 'usuario'),
-                    ('Luis Rodríguez', 'luis.rodriguez@empresa.com', '$2b$12$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW', 'visitante')
+                    ('Administrador Principal', 'brayangonzalez030405@gmail.com', 
+                     password_hashes[0], 'admin'),
+                    ('Carlos Mendoza', 'carlos.mendoza@empresa.com', 
+                     password_hashes[1], 'usuario'),
+                    ('Ana García', 'ana.garcia@empresa.com', 
+                     password_hashes[2], 'usuario'),
+                    ('Luis Rodríguez', 'luis.rodriguez@empresa.com', 
+                     password_hashes[3], 'visitante')
                 ]
                 
                 cur.executemany("""
                     INSERT INTO users (nombre, email, password, rol) 
                     VALUES (%s, %s, %s, %s)
                 """, users)
-                logger.info("✅ Usuarios insertados")
+                logger.info("✅ Usuarios insertados con hashes MODERNOS (scrypt)")
                 
                 # 2. Insertar proveedores EXACTOS
                 suppliers = [
@@ -337,11 +353,11 @@ class DatabaseSetup:
                 logger.info("🎉 ¡Datos EXACTOS insertados exitosamente!")
                 
                 # Mostrar credenciales
-                logger.info("👤 Usuarios creados:")
-                logger.info("   Admin: admin@sistema.com / secret")
-                logger.info("   Vendedor 1: carlos.mendoza@empresa.com / secret")
-                logger.info("   Vendedor 2: ana.garcia@empresa.com / secret")
-                logger.info("   Visitante: luis.rodriguez@empresa.com / secret")
+                logger.info("👤 Usuarios creados (password: 'secret'):")
+                logger.info("   1. brayangonzalez030405@gmail.com")
+                logger.info("   2. carlos.mendoza@empresa.com")
+                logger.info("   3. ana.garcia@empresa.com")
+                logger.info("   4. luis.rodriguez@empresa.com")
                 
             else:
                 logger.info("✅ Ya existen datos en la base de datos")
@@ -376,6 +392,44 @@ class DatabaseSetup:
             INSERT INTO movements (date, type, product_id, quantity, reference, supplier_id, user_id)
             VALUES (%s, %s, %s, %s, %s, %s, %s)
         """, movements)
+    
+    def drop_all_tables(self):
+        """Eliminar todas las tablas existentes (para reset)"""
+        conn = None
+        try:
+            conn = psycopg2.connect(**self.conn_params)
+            cur = conn.cursor()
+            
+            logger.info("🗑️ Eliminando todas las tablas existentes...")
+            
+            # Deshabilitar constraints temporalmente
+            cur.execute("SET session_replication_role = 'replica';")
+            
+            # Eliminar tablas en orden inverso (por dependencias)
+            tables = [
+                'sale_details', 'sales', 'movements',
+                'password_resets', 'user_sessions',
+                'products', 'suppliers', 'users'
+            ]
+            
+            for table in tables:
+                cur.execute(f"DROP TABLE IF EXISTS {table} CASCADE")
+                logger.info(f"✅ Tabla '{table}' eliminada")
+            
+            # Rehabilitar constraints
+            cur.execute("SET session_replication_role = 'origin';")
+            conn.commit()
+            logger.info("🎉 ¡Todas las tablas eliminadas exitosamente!")
+            
+        except Exception as e:
+            logger.error(f"❌ Error eliminando tablas: {e}")
+            if conn:
+                conn.rollback()
+            raise
+        finally:
+            if conn:
+                cur.close()
+                conn.close()
     
     def verify_tables_structure(self):
         """Verificar que todas las tablas tienen la estructura correcta"""
@@ -413,7 +467,7 @@ class DatabaseSetup:
                 cur.close()
                 conn.close()
 
-def initialize_database():
+def initialize_database(force_reset=False):
     """Función principal para inicializar la base de datos"""
     setup = DatabaseSetup()
     
@@ -425,15 +479,20 @@ def initialize_database():
         return False
     
     try:
-        # 2. Crear tablas
+        # 2. Resetear si se solicita
+        if force_reset:
+            logger.warning("⚠️ FORZANDO RESET COMPLETO DE BASE DE DATOS")
+            setup.drop_all_tables()
+        
+        # 3. Crear tablas
         setup.create_tables()
         
-        # 3. Insertar datos EXACTOS
+        # 4. Insertar datos EXACTOS con hashes MODERNOS
         setup.initialize_sample_data()
         
-        # 4. Verificar estructura
+        # 5. Verificar estructura
         if setup.verify_tables_structure():
-            logger.info("🎉 Base de datos inicializada EXITOSAMENTE con datos exactos")
+            logger.info("🎉 Base de datos inicializada EXITOSAMENTE con hashes modernos")
             return True
         else:
             logger.error("❌ Problemas con la estructura de la base de datos")
