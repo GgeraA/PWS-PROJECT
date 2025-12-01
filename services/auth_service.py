@@ -15,6 +15,7 @@ from flask_mail import Message
 from utils.email_helper import send_email
 from utils.audit_helper import log_event
 import re
+import os 
 import dns.resolver
 from email_validator import validate_email, EmailNotValidError
 
