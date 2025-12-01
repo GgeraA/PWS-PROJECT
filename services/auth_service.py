@@ -496,18 +496,23 @@ class AuthService:
 
     @staticmethod
     def recover_password(email):
-        """Recuperar contraseña - OPTIMIZADO para evitar timeout"""
+        """Recuperar contraseña - CON DEBUG DETALLADO"""
         try:
-            # ✅ VERIFICACIÓN RÁPIDA primero (operación local)
+            print(f"🔍 RECOVER_PASSWORD INICIADO para: {email}")
+            
+            # 1. Buscar usuario
             user = User.find_by_email(email)
             if not user:
-                # Respuesta inmediata sin procesar email (por seguridad)
-                return {"message": "Si el email existe, se enviarán instrucciones de recuperación"}, 200
-
-            # ✅ GENERAR TOKEN RÁPIDO
-            token = secrets.token_urlsafe(32)
+                print(f"⚠️ Usuario no encontrado: {email}")
+                return {"message": "Si el email existe, se enviarán instrucciones"}, 200
             
-            # ✅ GUARDAR TOKEN EN BD (operación rápida)
+            print(f"✅ Usuario encontrado: {user.nombre}")
+            
+            # 2. Generar token
+            token = secrets.token_urlsafe(32)
+            print(f"🔑 Token generado: {token}")
+            
+            # 3. Guardar en BD
             expira_en = datetime.datetime.now() + datetime.timedelta(minutes=30)
             
             conn = psycopg2.connect(**Config.DATABASE)
@@ -519,58 +524,83 @@ class AuthService:
             conn.commit()
             cur.close()
             conn.close()
-
-            # ✅ ENVIAR EMAIL EN SEGUNDO PLANO (evita timeout)
-            def send_email_background():
-                """Función para enviar email en segundo plano"""
-                try:
-                    # Usar la URL de tu frontend en Render
-                    reset_link = f"https://pos-frontend-13ys.onrender.com/reset-password?token={token}"
-                    
-                    subject = "Recuperación de Contraseña - POS-ML"
-                    body = f"""
-                    Hola {user.nombre},
-
-                    Has solicitado recuperar tu contraseña.
-
-                    Usa el siguiente enlace para restablecer tu contraseña:
-                    {reset_link}
-
-                    Este enlace expirará en 30 minutos.
-
-                    Si no solicitaste esta acción, por favor ignora este mensaje.
-
-                    Saludos,
-                    Equipo POS-ML
-                    """
-                    
-                    # Enviar email con timeout configurado
-                    result = send_email(user.email, subject, body)
-                    
-                    if result.get("status") == "error":
-                        logger.error(f"⚠️ Email falló en background: {result.get('error')}")
-                    else:
-                        logger.info(f"✅ Email enviado exitosamente en background a {user.email}")
-                        
-                except Exception as e:
-                    logger.error(f"⚠️ Error en email background: {e}")
             
-            # ✅ LANZAR EN HILO SEPARADO (no bloquea la respuesta)
-            email_thread = threading.Thread(target=send_email_background)
-            email_thread.daemon = True  # No bloquear salida del programa
-            email_thread.start()
+            print(f"✅ Token guardado en BD para: {email}")
             
-            # ✅ LOG RÁPIDO (sin esperar email)
-            log_event("RECOVER_PASSWORD", email, "SUCCESS", "Proceso iniciado en background")
+            # 4. ✅ VERIFICAR CONFIGURACIÓN DE EMAIL PRIMERO
+            print(f"📧 Configuración email:")
+            print(f"   - Servidor: {Config.MAIL_SERVER}")
+            print(f"   - Puerto: {Config.MAIL_PORT}")
+            print(f"   - Usuario: {Config.MAIL_USERNAME}")
+            print(f"   - Password: {'✅ Configurada' if Config.MAIL_PASSWORD else '❌ Faltante'}")
+            print(f"   - Remitente: {Config.MAIL_DEFAULT_SENDER}")
             
-            # ✅ RESPUESTA INMEDIATA AL USUARIO (menos de 1 segundo)
-            return {"message": "Enlace de recuperación enviado correctamente a tu email"}, 200
+            # 5. ✅ ENVIAR EMAIL INMEDIATAMENTE (sin background para debug)
+            print(f"📧 Enviando email INMEDIATO a: {email}")
+            
+            reset_link = f"https://pos-frontend-13ys.onrender.com/reset-password?token={token}"
+            subject = "Recuperación de Contraseña - POS-ML"
+            body = f"""
+            Hola {user.nombre},
+
+            Has solicitado recuperar tu contraseña.
+
+            Usa este enlace: {reset_link}
+
+            Expira en 30 minutos.
+
+            Saludos,
+            Equipo POS-ML
+            """
+            
+            # 6. ✅ LLAMAR DIRECTAMENTE send_email y mostrar resultado
+            from utils.email_helper import send_email
+            result = send_email(email, subject, body)
+            
+            print(f"📨 RESULTADO send_email:")
+            print(f"   - Status: {result.get('status')}")
+            print(f"   - Error: {result.get('error', 'Ninguno')}")
+            print(f"   - Latency: {result.get('latency', 0)}s")
+            
+            if result.get("status") == "error":
+                print(f"❌ ERROR ENVIANDO EMAIL: {result.get('error')}")
+                # Intentar fallback simple
+                return AuthService._send_email_fallback(email, user.nombre, token)
+            
+            print(f"✅ Email aparentemente enviado a {email}")
+            log_event("RECOVER_PASSWORD", email, "SUCCESS", f"Email enviado: {result.get('latency', 0)}s")
+            
+            return {"message": "Enlace de recuperación enviado a tu correo electrónico"}, 200
             
         except Exception as e:
+            print(f"❌ ERROR CRÍTICO en recover_password: {type(e).__name__}: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            
             log_event("RECOVER_PASSWORD", email, "ERROR", str(e))
-            # No devolver error 500 para no revelar problemas internos
-            return {"message": "Solicitud procesada. Revisa tu correo en unos minutos."}, 200
-        
+        return {"message": "Solicitud procesada. Si no recibes email, contacta al administrador."}, 200
+
+    @staticmethod
+    def _send_email_fallback(email, nombre, token):
+        """Fallback si Brevo falla"""
+        try:
+            print(f"🔄 Intentando fallback para {email}")
+            
+            # Usar otro método simple
+            reset_link = f"https://pos-frontend-13ys.onrender.com/reset-password?token={token}"
+            message = f"Recuperación para {nombre}: {reset_link}"
+            
+            # Solo loggear (para desarrollo)
+            print(f"📝 [FALLBACK] Email simulado para {email}")
+            print(f"📝 [FALLBACK] Enlace: {reset_link}")
+            
+            return {"message": "Instrucciones enviadas (modo desarrollo)"}, 200
+            
+        except Exception as e:
+            print(f"❌ Fallback también falló: {e}")
+            return {"message": "Procesado. Contacta soporte si no recibes email."}, 200
+
+   
     @staticmethod
     def reset_password(token, new_password):
         """Restablecer contraseña con token válido - Versión mejorada"""
