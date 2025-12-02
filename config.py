@@ -39,18 +39,24 @@ class Config:
     SECRET_KEY = os.getenv("SECRET_KEY", "fallback-secret-key-for-development-only")
     JWT_EXP_DELTA_SECONDS = int(os.getenv("JWT_EXP_DELTA_SECONDS", 300))
 
-    # 🔥🔧 CONFIGURACIÓN DE EMAIL ACTUALIZADA
-    # ----------------------------------------
-    # 1. MAILGUN (PRIMERA OPCIÓN - FUNCIONA EN RENDER)
+    # 🔥🔧 CONFIGURACIÓN DE EMAIL ACTUALIZADA - PRIORIDAD BREVO API
+    # --------------------------------------------------------------
+    
+    # 1. BREVO API (PRIMERA OPCIÓN - FUNCIONA EN RENDER)
+    BREVO_API_KEY = os.getenv("BREVO_API_KEY", "")
+    BREVO_SENDER_EMAIL = os.getenv("BREVO_SENDER_EMAIL", "respaldogg20@gmail.com")
+    BREVO_SENDER_NAME = os.getenv("BREVO_SENDER_NAME", "POS-ML System")
+    
+    # 2. MAILGUN (SEGUNDA OPCIÓN)
     MAILGUN_API_KEY = os.getenv("MAILGUN_API_KEY", "")
     MAILGUN_DOMAIN = os.getenv("MAILGUN_DOMAIN", "")
     MAILGUN_FROM_EMAIL = os.getenv("MAILGUN_FROM_EMAIL", "noreply@pos-ml.com")
     
-    # 2. RESEND (SEGUNDA OPCIÓN)
+    # 3. RESEND (TERCERA OPCIÓN)
     RESEND_API_KEY = os.getenv("RESEND_API_KEY", "")
     RESEND_FROM_EMAIL = os.getenv("RESEND_FROM_EMAIL", "onboarding@resend.dev")
     
-    # 3. BREVO/SMTP (TERCERA OPCIÓN - solo desarrollo local)
+    # 4. BREVO SMTP (CUARTA OPCIÓN - solo desarrollo local)
     MAIL_SERVER = os.getenv("MAIL_SERVER", "smtp-relay.brevo.com")
     MAIL_PORT = int(os.getenv("MAIL_PORT", 587))
     MAIL_USE_TLS = os.getenv("MAIL_USE_TLS", "True").lower() == "true"
@@ -67,16 +73,25 @@ class Config:
     FLASK_ENV = os.getenv("FLASK_ENV", "production")
     DEBUG = os.getenv("DEBUG", "False").lower() == "true"
     
-    # 🔥 MÉTODOS DE AYUDA PARA EMAIL
+    # 🔥 MÉTODOS DE AYUDA PARA EMAIL MEJORADOS
     @staticmethod
     def get_email_provider():
-        """Determina qué proveedor de email usar basado en configuración"""
-        if Config.MAILGUN_API_KEY and Config.MAILGUN_DOMAIN:
+        """
+        Determina qué proveedor de email usar basado en configuración
+        PRIORIDAD: Brevo API → Mailgun → Resend → Brevo SMTP
+        """
+        # 1. Brevo API (prioridad máxima - funciona en Render)
+        if Config.BREVO_API_KEY:
+            return "brevo_api"
+        # 2. Mailgun
+        elif Config.MAILGUN_API_KEY and Config.MAILGUN_DOMAIN:
             return "mailgun"
+        # 3. Resend
         elif Config.RESEND_API_KEY:
             return "resend"
+        # 4. Brevo SMTP (solo para desarrollo local)
         elif Config.MAIL_USERNAME and Config.MAIL_PASSWORD:
-            return "brevo"
+            return "brevo_smtp"
         else:
             return "none"
     
@@ -90,7 +105,10 @@ class Config:
         """Obtiene el mejor email remitente basado en el proveedor activo"""
         provider = Config.get_email_provider()
         
-        if provider == "mailgun":
+        if provider == "brevo_api":
+            # Para Brevo API, usamos el email configurado
+            return f"{Config.BREVO_SENDER_NAME} <{Config.BREVO_SENDER_EMAIL}>"
+        elif provider == "mailgun":
             # Para Mailgun, usamos el dominio sandbox
             domain = Config.MAILGUN_DOMAIN
             if domain and "sandbox" in domain:
@@ -99,7 +117,46 @@ class Config:
                 return Config.MAILGUN_FROM_EMAIL
         elif provider == "resend":
             return Config.RESEND_FROM_EMAIL
-        elif provider == "brevo":
+        elif provider == "brevo_smtp":
             return Config.MAIL_DEFAULT_SENDER
         else:
             return "POS-ML System <noreply@pos-ml.com>"
+    
+    @staticmethod
+    def get_email_provider_info():
+        """Obtiene información detallada del proveedor configurado"""
+        provider = Config.get_email_provider()
+        
+        info = {
+            "provider": provider,
+            "configured": provider != "none",
+            "frontend_url": Config.FRONTEND_URL,
+            "environment": Config.FLASK_ENV
+        }
+        
+        if provider == "brevo_api":
+            info.update({
+                "api_key_configured": bool(Config.BREVO_API_KEY),
+                "sender_email": Config.BREVO_SENDER_EMAIL,
+                "sender_name": Config.BREVO_SENDER_NAME
+            })
+        elif provider == "mailgun":
+            info.update({
+                "api_key_configured": bool(Config.MAILGUN_API_KEY),
+                "domain": Config.MAILGUN_DOMAIN,
+                "from_email": Config.MAILGUN_FROM_EMAIL
+            })
+        elif provider == "resend":
+            info.update({
+                "api_key_configured": bool(Config.RESEND_API_KEY),
+                "from_email": Config.RESEND_FROM_EMAIL
+            })
+        elif provider == "brevo_smtp":
+            info.update({
+                "server": Config.MAIL_SERVER,
+                "username": Config.MAIL_USERNAME,
+                "password_configured": bool(Config.MAIL_PASSWORD),
+                "from_email": Config.MAIL_DEFAULT_SENDER
+            })
+        
+        return info

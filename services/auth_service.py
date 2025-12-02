@@ -498,22 +498,27 @@ class AuthService:
 
     @staticmethod
     def recover_password(email):
-        """Recuperar contraseña usando servicio unificado de email"""
+        """Recuperar contraseña usando Brevo API - 100% variables de entorno"""
         try:
             print(f"🔍 RECOVER_PASSWORD para: {email}")
             
-            # 1. Buscar usuario
+            # 1. Validar email
+            if not email or '@' not in email:
+                return {"message": "Email inválido"}, 400
+            
+            # 2. Buscar usuario
             user = User.find_by_email(email)
             if not user:
+                # Por seguridad, no revelar si existe o no
                 return {"message": "Si el email existe, se enviarán instrucciones"}, 200
             
             print(f"✅ Usuario encontrado: {user.nombre}")
             
-            # 2. Generar token
+            # 3. Generar token
             token = secrets.token_urlsafe(64)
             expira_en = datetime.datetime.now() + datetime.timedelta(minutes=30)
             
-            # 3. Guardar en BD
+            # 4. Guardar en BD
             conn = psycopg2.connect(**Config.DATABASE)
             cur = conn.cursor()
             cur.execute("DELETE FROM password_resets WHERE email = %s", (email,))
@@ -527,22 +532,27 @@ class AuthService:
             
             print(f"✅ Token guardado en BD")
             
-            # 4. Crear enlace
-            frontend_url = Config.FRONTEND_URL  # Usar desde Config
+            # 5. Crear enlace (usar variable de entorno o valor por defecto)
+            frontend_url = os.getenv('FRONTEND_URL', 'https://pos-frontend-13ys.onrender.com')
             reset_link = f"{frontend_url}/reset-password?token={token}"
             
-            # 5. Preparar email
+            print(f"🔗 Enlace: {reset_link}")
+            
+            # 6. Preparar email
             subject = "🔐 Recuperación de Contraseña - POS-ML"
             
             text_content = f"""
             Hola {user.nombre},
-            
+
             Has solicitado recuperar tu contraseña en POS-ML System.
-            
-            ⚡ Usa este enlace: {reset_link}
-            
-            ⏰ Expira en 30 minutos.
-            
+
+            ⚡ Usa este enlace para restablecer tu contraseña:
+            {reset_link}
+
+            ⏰ Este enlace expirará en 30 minutos.
+
+            ⚠️ Si no solicitaste este cambio, ignora este mensaje.
+
             Saludos,
             Equipo POS-ML
             """
@@ -551,16 +561,18 @@ class AuthService:
             <div style="font-family: Arial, sans-serif;">
                 <h2>🔐 Recuperación de Contraseña</h2>
                 <p>Hola {user.nombre},</p>
-                <p><a href="{reset_link}">Haz clic aquí para recuperar tu contraseña</a></p>
-                <p>O copia: {reset_link}</p>
+                <p>Haz clic en el enlace para recuperar tu contraseña:</p>
+                <p><a href="{reset_link}">{reset_link}</a></p>
                 <p><em>Expira en 30 minutos</em></p>
             </div>
             """
             
-            # 6. Enviar email usando servicio unificado
-            from utils.email_service_unified import EmailService
+            # 7. Enviar email con Brevo
+            from utils.brevo_service import BrevoService
             
-            result = EmailService.send_email(
+            print(f"📧 Enviando con Brevo...")
+            
+            result = BrevoService.send_email(
                 to_email=email,
                 subject=subject,
                 text_body=text_content,
@@ -568,30 +580,37 @@ class AuthService:
             )
             
             if result.get("success"):
-                print(f"✅ Email enviado con {result.get('provider')}")
+                print(f"✅ Email enviado exitosamente")
+                
+                log_event("RECOVER_PASSWORD", email, "SUCCESS", 
+                        f"Brevo - Message ID: {result.get('message_id')}")
+                
                 return {
-                    "message": "Enlace de recuperación enviado a tu correo",
+                    "message": "Enlace de recuperación enviado a tu correo electrónico",
                     "email_sent": True,
-                    "provider": result.get("provider")
+                    "provider": "brevo"
                 }, 200
             else:
-                print(f"❌ Error: {result.get('error')}")
+                print(f"❌ Error Brevo: {result.get('error', 'Unknown')}")
                 
-                # Modo desarrollo: mostrar enlace
-                if Config.DEBUG or Config.FLASK_ENV == 'development':
+                # Modo desarrollo: mostrar ayuda
+                if os.getenv('FLASK_ENV') == 'development' or os.getenv('DEBUG') == 'true':
                     return {
-                        "message": "EN DESARROLLO: Usa este enlace",
+                        "message": "EN DESARROLLO: Configuración necesaria",
                         "reset_link": reset_link,
                         "token": token,
-                        "debug_error": result.get('error')
+                        "config_needed": True,
+                        "instructions": "Agrega BREVO_API_KEY en variables de entorno",
+                        "email_sent": False
                     }, 200
                 else:
                     return {
-                        "message": "Solicitud procesada. Contacta soporte si no recibes email."
+                        "message": "Solicitud procesada. Contacta soporte si no recibes email.",
+                        "email_sent": False
                     }, 200
                     
         except Exception as e:
-            print(f"❌ ERROR: {e}")
+            print(f"❌ ERROR: {type(e).__name__}: {str(e)}")
             return {"message": "Solicitud procesada."}, 200
 
     @staticmethod
