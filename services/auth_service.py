@@ -498,127 +498,110 @@ class AuthService:
 
     @staticmethod
     def recover_password(email):
-        """Recuperar contraseña usando Resend API - VERSIÓN CORREGIDA"""
+        """Recuperar contraseña usando servicio unificado de email"""
         try:
             print(f"🔍 RECOVER_PASSWORD para: {email}")
             
             # 1. Buscar usuario
             user = User.find_by_email(email)
             if not user:
-                # Por seguridad, no revelar si el email existe o no
-                print(f"⚠️ Email no encontrado (por seguridad): {email}")
                 return {"message": "Si el email existe, se enviarán instrucciones"}, 200
             
             print(f"✅ Usuario encontrado: {user.nombre}")
             
-            # 2. Generar token seguro
+            # 2. Generar token
             token = secrets.token_urlsafe(64)
-            print(f"🔑 Token generado (primeros 10 chars): {token[:10]}...")
-            
-            # 3. Guardar en BD con expiración
             expira_en = datetime.datetime.now() + datetime.timedelta(minutes=30)
             
+            # 3. Guardar en BD
             conn = psycopg2.connect(**Config.DATABASE)
             cur = conn.cursor()
-            
-            # Primero, limpiar tokens previos para este email
             cur.execute("DELETE FROM password_resets WHERE email = %s", (email,))
-            
-            # Insertar nuevo token (SIN created_at - porque tu tabla no lo tiene)
             cur.execute(
-                """INSERT INTO password_resets (email, token, expira_en) 
-                VALUES (%s, %s, %s)""",
+                "INSERT INTO password_resets (email, token, expira_en) VALUES (%s, %s, %s)",
                 (email, token, expira_en)
             )
-            
             conn.commit()
             cur.close()
             conn.close()
             
-            print(f"✅ Token guardado en BD exitosamente")
+            print(f"✅ Token guardado en BD")
             
-            # 4. Crear enlace de reset
-            # IMPORTANTE: Cambia esto a tu dominio real
-            frontend_url = os.getenv('FRONTEND_URL', 'https://pos-frontend-13ys.onrender.com')
+            # 4. Crear enlace
+            frontend_url = Config.FRONTEND_URL  # Usar desde Config
             reset_link = f"{frontend_url}/reset-password?token={token}"
             
-            # 5. Preparar contenido del email
+            # 5. Preparar email
             subject = "🔐 Recuperación de Contraseña - POS-ML"
             
-            # Versión texto plano (más simple)
             text_content = f"""
-            Recuperación de Contraseña - POS-ML
-            
             Hola {user.nombre},
             
             Has solicitado recuperar tu contraseña en POS-ML System.
             
-            ⚡ Usa este enlace para restablecer tu contraseña:
-            {reset_link}
+            ⚡ Usa este enlace: {reset_link}
             
-            ⏰ Este enlace expirará en 30 minutos.
-            
-            ⚠️ Si no solicitaste este cambio, por favor ignora este mensaje.
+            ⏰ Expira en 30 minutos.
             
             Saludos,
             Equipo POS-ML
             """
             
-            # 6. Enviar email usando Resend
-            from utils.email_resend import send_email_resend
+            html_content = f"""
+            <div style="font-family: Arial, sans-serif;">
+                <h2>🔐 Recuperación de Contraseña</h2>
+                <p>Hola {user.nombre},</p>
+                <p><a href="{reset_link}">Haz clic aquí para recuperar tu contraseña</a></p>
+                <p>O copia: {reset_link}</p>
+                <p><em>Expira en 30 minutos</em></p>
+            </div>
+            """
             
-            result = send_email_resend(
+            # 6. Enviar email usando servicio unificado
+            from utils.email_service_unified import EmailService
+            
+            result = EmailService.send_email(
                 to_email=email,
                 subject=subject,
-                body=text_content
+                text_body=text_content,
+                html_body=html_content
             )
             
-            if result.get("status") == "success":
-                print(f"✅ Email enviado exitosamente con Resend")
-                log_event("RECOVER_PASSWORD", email, "SUCCESS", 
-                        f"Resend ID: {result.get('id', 'N/A')}")
-                
+            if result.get("success"):
+                print(f"✅ Email enviado con {result.get('provider')}")
                 return {
-                    "message": "Enlace de recuperación enviado a tu correo electrónico",
+                    "message": "Enlace de recuperación enviado a tu correo",
                     "email_sent": True,
-                    "provider": "resend"
+                    "provider": result.get("provider")
                 }, 200
             else:
-                print(f"❌ Resend falló: {result.get('error')}")
+                print(f"❌ Error: {result.get('error')}")
                 
-                # Para desarrollo/testing, mostrar el enlace
-                if os.getenv('FLASK_ENV') == 'development' or os.getenv('DEBUG') == 'True':
+                # Modo desarrollo: mostrar enlace
+                if Config.DEBUG or Config.FLASK_ENV == 'development':
                     return {
-                        "message": "En desarrollo: Usa este enlace para resetear",
+                        "message": "EN DESARROLLO: Usa este enlace",
                         "reset_link": reset_link,
                         "token": token,
-                        "note": f"Error email: {result.get('error')}",
-                        "email_sent": False
+                        "debug_error": result.get('error')
                     }, 200
                 else:
-                    # En producción, solo decir que se procesó
                     return {
-                        "message": "Solicitud procesada. Si no recibes el email en unos minutos, contacta soporte."
+                        "message": "Solicitud procesada. Contacta soporte si no recibes email."
                     }, 200
-                
+                    
         except Exception as e:
-            print(f"❌ ERROR en recover_password: {type(e).__name__}: {str(e)}")
-            import traceback
-            traceback.print_exc()
-            
-            log_event("RECOVER_PASSWORD", email, "ERROR", str(e))
-            
-            # Respuesta segura
-            return {
-                "message": "Solicitud procesada. Si no recibes el email, contacta soporte técnico."
-            }, 200
- 
+            print(f"❌ ERROR: {e}")
+            return {"message": "Solicitud procesada."}, 200
+
     @staticmethod
     def reset_password(token, new_password):
-        """Restablecer contraseña con token válido - VERSIÓN CORREGIDA"""
+        """Restablecer contraseña con token válido - VERSIÓN CON MAILGUN"""
         try:
             conn = psycopg2.connect(**Config.DATABASE)
             cur = conn.cursor()
+            
+            print(f"🔄 Reset password con token: {token[:20]}...")
             
             # Buscar token válido y no expirado
             cur.execute("""
@@ -631,15 +614,18 @@ class AuthService:
             if not row:
                 cur.close()
                 conn.close()
+                print(f"❌ Token inválido o expirado: {token[:20]}...")
                 return {"error": "Token inválido o expirado"}, 400
 
             email_db = row[0]
+            print(f"✅ Token válido para: {email_db}")
             
             # Validar fortaleza de nueva contraseña
             is_valid, password_error = AuthService.validate_password_strength(new_password)
             if not is_valid:
                 cur.close()
                 conn.close()
+                print(f"❌ Contraseña débil: {password_error}")
                 return {"error": password_error}, 400
 
             # Buscar usuario
@@ -647,42 +633,71 @@ class AuthService:
             if not user:
                 cur.close()
                 conn.close()
+                print(f"❌ Usuario no encontrado: {email_db}")
                 return {"error": "Usuario no encontrado"}, 404
 
+            print(f"✅ Usuario encontrado: {user.nombre}")
+            
             # Actualizar contraseña
             from werkzeug.security import generate_password_hash
             password_hash = generate_password_hash(new_password)
             
             cur.execute("""
                 UPDATE users 
-                SET password = %s 
+                SET password = %s, updated_at = NOW()
                 WHERE email = %s
+                RETURNING id
             """, (password_hash, email_db))
+            
+            updated_id = cur.fetchone()[0]
+            print(f"✅ Contraseña actualizada para usuario ID: {updated_id}")
             
             # Eliminar token usado
             cur.execute("DELETE FROM password_resets WHERE token = %s", (token,))
+            deleted_count = cur.rowcount
+            print(f"✅ Token eliminado: {deleted_count} registro(s)")
             
             conn.commit()
             cur.close()
             conn.close()
 
-            # Opcional: Enviar email de confirmación
+            # Enviar email de confirmación con Mailgun
             try:
                 subject = "✅ Contraseña Actualizada - POS-ML"
-                body = f"""
+                text_content = f"""
                 Hola {user.nombre},
                 
                 Tu contraseña ha sido actualizada exitosamente.
                 
-                Si no realizaste esta acción, por favor contacta al administrador inmediatamente.
+                📅 Fecha: {datetime.datetime.now().strftime('%d/%m/%Y %H:%M')}
+                
+                ⚠️ Si no realizaste esta acción, contacta al administrador inmediatamente.
                 
                 Saludos,
                 Equipo POS-ML
                 """
                 
-                from utils.email_resend import send_email_resend
-                send_email_resend(email_db, subject, body)
+                # Intentar Mailgun primero
+                mailgun_api_key = os.getenv('MAILGUN_API_KEY')
+                mailgun_domain = os.getenv('MAILGUN_DOMAIN')
                 
+                if mailgun_api_key and mailgun_domain:
+                    import requests
+                    url = f"https://api.mailgun.net/v3/{mailgun_domain}/messages"
+                    
+                    requests.post(
+                        url,
+                        auth=("api", mailgun_api_key),
+                        data={
+                            "from": f"POS-ML System <noreply@{mailgun_domain}>",
+                            "to": [email_db],
+                            "subject": subject,
+                            "text": text_content
+                        },
+                        timeout=10
+                    )
+                    print(f"📧 Email de confirmación enviado a {email_db} via Mailgun")
+                    
             except Exception as email_error:
                 print(f"⚠️ No se pudo enviar email de confirmación: {email_error}")
                 # No fallar el reset por error de email
@@ -691,9 +706,10 @@ class AuthService:
             return {"message": "Contraseña actualizada correctamente"}, 200
             
         except Exception as e:
+            print(f"❌ ERROR en reset_password: {type(e).__name__}: {str(e)}")
             log_event("RESET_PASSWORD", "SYSTEM", "ERROR", str(e))
             return {"error": "Error interno del servidor"}, 500
-        
+  
     @staticmethod
     def _send_email_fallback(email, nombre, token):
         """Fallback si Brevo falla"""
